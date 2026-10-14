@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { Fragment } from "react";
 
-// Matches URLs, @mentions and #hashtags in one pass. Keep hashtag boundaries
-// and Unicode characters aligned with the post indexer.
-const TOKEN = /(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{1,15})|(?<![\p{L}\p{N}_])(#[\p{L}\p{N}_]+)/gu;
+// Keep hashtag boundaries and Unicode characters aligned with the post indexer.
+const HASHTAG_SOURCE = String.raw`(?<![\p{L}\p{N}_])#[\p{L}\p{N}_]+`;
+
+/** Matches a #hashtag anywhere in a string. */
+export const HASHTAG = new RegExp(HASHTAG_SOURCE, "gu");
+
+// Matches URLs, @mentions and #hashtags in one pass.
+const TOKEN = new RegExp(
+  String.raw`(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{1,15})|(${HASHTAG_SOURCE})`,
+  "gu",
+);
 
 const linkClass = "text-accent-ink hover:underline";
 

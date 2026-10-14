@@ -12,6 +12,7 @@ import {
 } from "@/lib/types";
 import { Avatar } from "./avatar";
 import { QuoteCard } from "./quote-card";
+import { HASHTAG } from "./rich-text";
 import { useToast } from "./toast";
 import { useViewer } from "./viewer-context";
 
@@ -42,7 +43,6 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(!compact);
   const [pending, startTransition] = useTransition();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Revoke preview URLs when attachments go away.
@@ -54,13 +54,6 @@ export function Composer({
     () => () => attachmentsRef.current.forEach((a) => URL.revokeObjectURL(a.url)),
     [],
   );
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [text]);
 
   const length = [...text].length;
   const remaining = POST_MAX_LENGTH - length;
@@ -125,29 +118,31 @@ export function Composer({
           </p>
         )}
         <div className={clsx("flex gap-3", compact && !expanded && "items-center")}>
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onFocus={() => setExpanded(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            onPaste={(e) => {
-              if (e.clipboardData.files.length > 0) {
-                e.preventDefault();
-                addFiles(e.clipboardData.files);
-              }
-            }}
-            autoFocus={autoFocus}
-            rows={1}
-            placeholder={placeholder ?? (replyTo ? "Post your reply" : "What's happening?")}
-            aria-label={placeholder ?? "Post text"}
-            className="block min-h-[52px] w-full resize-none overflow-hidden bg-transparent py-3 text-xl leading-7 text-fg outline-none placeholder:text-fg-subtle"
-          />
+          <div className="relative min-h-[52px] min-w-0 flex-1">
+            <HighlightedText text={text} />
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onFocus={() => setExpanded(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              onPaste={(e) => {
+                if (e.clipboardData.files.length > 0) {
+                  e.preventDefault();
+                  addFiles(e.clipboardData.files);
+                }
+              }}
+              autoFocus={autoFocus}
+              rows={1}
+              placeholder={placeholder ?? (replyTo ? "Post your reply" : "What's happening?")}
+              aria-label={placeholder ?? "Post text"}
+              className="absolute inset-0 block size-full resize-none overflow-hidden bg-transparent py-3 text-xl leading-7 text-transparent caret-fg outline-none placeholder:text-fg-subtle"
+            />
+          </div>
           {compact && !expanded && (
             <button type="button" disabled className="btn-primary h-9 px-4 text-[15px]">
               Reply
@@ -233,6 +228,37 @@ export function Composer({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Mirrors the textarea's text underneath it so hashtags can be colored. It sets
+ * the field's height, so its font, padding and wrapping must match the textarea.
+ */
+function HighlightedText({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(HASHTAG)) {
+    const index = match.index ?? 0;
+    if (index > last) parts.push(text.slice(last, index));
+    parts.push(
+      <span key={index} className="text-accent-ink">
+        {match[0]}
+      </span>,
+    );
+    last = index + match[0].length;
+  }
+  parts.push(text.slice(last));
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none py-3 text-xl leading-7 break-words whitespace-pre-wrap text-fg"
+    >
+      {parts}
+      {/* A trailing newline collapses unless something follows it. */}
+      {"\u200b"}
     </div>
   );
 }
