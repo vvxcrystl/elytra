@@ -8,11 +8,9 @@ import {
   Home,
   LogOut,
   Mail,
-  Monitor,
-  Moon,
   MoreHorizontal,
   Search,
-  Sun,
+  Settings,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,7 +22,6 @@ import { Logo } from "./logo";
 import { Menu } from "./menu";
 import { useUnreadMessageCount } from "./messages/polling";
 import { useUnreadNotificationCount } from "./notification-updates";
-import { useTheme } from "./theme";
 import { VerifiedBadge } from "./verified-badge";
 import { useViewer } from "./viewer-context";
 
@@ -137,21 +134,13 @@ export function SidebarNav() {
 
 function useAccountMenuItems() {
   const viewer = useViewer();
-  const { theme, setTheme } = useTheme();
-
-  const next = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-  const themeLabel = {
-    system: "Use system theme",
-    light: "Switch to light theme",
-    dark: "Switch to dark theme",
-  }[next];
-  const ThemeIcon = { system: Monitor, light: Sun, dark: Moon }[next];
+  const router = useRouter();
 
   return [
     {
-      label: themeLabel,
-      icon: <ThemeIcon className="size-[18px]" />,
-      onSelect: () => setTheme(next),
+      label: "Settings",
+      icon: <Settings className="size-[18px]" />,
+      onSelect: () => router.push("/settings"),
     },
     {
       label: `Log out @${viewer.username}`,

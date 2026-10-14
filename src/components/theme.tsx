@@ -46,3 +46,20 @@ export function useTheme() {
 
   return { theme, setTheme };
 }
+
+export function ThemePicker() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <select
+      aria-label="Color theme"
+      value={theme}
+      onChange={(event) => setTheme(event.currentTarget.value as Theme)}
+      className="btn-outline h-9 px-3 text-[15px]"
+    >
+      <option value="system">System</option>
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
+  );
+}

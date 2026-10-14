@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Fragment } from "react";
 
-// Matches URLs, @mentions and #hashtags in one pass.
-const TOKEN = /(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{1,15})|(#[A-Za-z0-9_]+)/g;
+// Matches URLs, @mentions and #hashtags in one pass. Keep hashtag boundaries
+// and Unicode characters aligned with the post indexer.
+const TOKEN = /(https?:\/\/[^\s]+)|(@[A-Za-z0-9_]{1,15})|(?<![\p{L}\p{N}_])(#[\p{L}\p{N}_]+)/gu;
 
 const linkClass = "text-accent-ink hover:underline";
 

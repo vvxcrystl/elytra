@@ -70,8 +70,13 @@ export function editProfile(viewerId: string, update: ProfileUpdate): string[] {
   });
 }
 export function trends(limit: number): Trend[] {
-  const recent = one<{ count: number }>("SELECT COUNT(*) AS count FROM hashtags h JOIN posts p ON p.id=h.post_id WHERE p.created_at>=?", Date.now() - 7 * 86400000)!.count;
-  return all<{ tag: string; postCount: number }>(`SELECT h.tag,COUNT(*) AS postCount FROM hashtags h JOIN posts p ON p.id=h.post_id ${recent ? "WHERE p.created_at>=?" : ""} GROUP BY h.tag ORDER BY postCount DESC,h.tag LIMIT ?`, ...(recent ? [Date.now() - 7 * 86400000] : []), Math.max(0, Math.min(100, Math.floor(limit) || 0)));
+  const since = Date.now() - 7 * 86400000;
+  return all<{ tag: string; postCount: number }>(`SELECT h.tag,COUNT(DISTINCT p.id) AS postCount
+    FROM hashtags h JOIN posts p ON p.id=h.post_id
+    WHERE p.created_at>=?
+    GROUP BY h.tag
+    ORDER BY postCount DESC,MAX(p.created_at) DESC,h.tag
+    LIMIT ?`, since, Math.max(0, Math.min(100, Math.floor(limit) || 0)));
 }
 export function notificationsFor(viewerId: string | null, mentionsOnly = false): Notification[] {
   if (!viewerId) return [];

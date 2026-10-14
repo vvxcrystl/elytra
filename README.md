@@ -2,23 +2,22 @@
 
 # elytra
 
-A Twitter-style social app built with Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. There are no external services and no native dependencies.
+A Twitter-style social app built with Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. It needs no external services and has no native dependencies.
 
 ## Run it
 
-Requires Node 24 or newer for `node:sqlite` (developed on Node 26).
+You need Node 24 or newer for `node:sqlite`. The app was developed on Node 26.
 
 ```sh
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The database is created and seeded on first request at `data/elytra.db`. Sign in as `demo` / `password123`, or as any seeded user (`theo`, `priya`, `marcus`, and others) with the same password.
+Open http://localhost:3000. The first request creates and seeds the database at `data/elytra.db`. Sign in as `demo` with the password `password123`. The other seeded users (`theo`, `priya`, `marcus`, and more) use the same password.
 
-## Host on your own domain
+## Host it on your own domain
 
-Use the included Docker Compose setup to serve Elytra at a URL such as
-`https://twitter.somedomain.org` through Cloudflare Tunnel:
+The included Docker Compose setup serves Elytra at a URL such as `https://twitter.somedomain.org` through Cloudflare Tunnel.
 
 ```sh
 cp .env.example .env
@@ -26,43 +25,56 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Point the tunnel's published hostname at `http://app:3000`. The setup persists
-your database and uploads and starts without demo accounts.
-See [the hosting guide](docs/HOSTING.md) for the Cloudflare steps, backups,
-and hosting without Docker.
+Then point the tunnel's published hostname at `http://app:3000`. The database and uploads persist in a Docker volume, and the app starts with no demo accounts. The [hosting guide](docs/HOSTING.md) covers the Cloudflare steps, backups, and hosting without Docker.
 
 ## Features
 
-- Accounts with username and password. Sessions live in an httpOnly cookie, and the database stores only a SHA-256 hash of each session token.
-- Posts up to 280 characters with up to 4 images (PNG, JPEG, GIF, WebP, 5 MB each). Paste images straight into the composer.
-- Replies with threaded detail pages, quote posts, reposts, likes, and bookmarks.
-- Home timeline with "For you" (everyone) and "Following" tabs, loaded page by page as you scroll.
-- Profiles with Posts, Replies, Media, and Likes tabs, follower and following lists, and an edit dialog for name, bio, location, website, avatar, and banner.
-- Search across posts (Top, Latest, Media) and people. `#hashtags` and `@mentions` are links.
-- Trending hashtags from the last 7 days and follow suggestions.
-- Notifications for likes, reposts, follows, replies, mentions, and quotes, with an unread badge.
-- Direct messages with an inbox, people search, paginated conversations, unread badges, read markers, and sender deletion. DMs are end-to-end encrypted in the browser; SQLite stores signed ciphertext only. Recovery codes restore keys on another device, and contacts can compare verification codes. See [encryption details](docs/E2EE.md).
-- Blocking and muting, including messaging controls. Blocks remove follows in both directions and prevent interactions; mutes hide accounts from feeds and notifications.
-- A versioned REST API with cookie or bearer authentication, idempotent interactions, image uploads, cursor pagination, validation, and persistent rate limits. See [API documentation](docs/API.md) and `/api/v1/openapi.json`.
-- Light, dark, and system themes. The layout follows Twitter's three columns on desktop, an icon rail on tablets, and a bottom tab bar on phones.
+Accounts and posting:
+
+- Sign up with a username and password. The session token lives in an httpOnly cookie, and the database stores only its SHA-256 hash.
+- Posts hold up to 280 characters and up to 4 images (PNG, JPEG, GIF, or WebP, 5 MB each). You can paste images into the composer.
+- You can reply, quote, repost, like, and bookmark. Replies appear on threaded detail pages.
+
+Reading and finding people:
+
+- The home timeline has a "For you" tab (everyone) and a "Following" tab. Both load more posts as you scroll.
+- Profiles have Posts, Replies, Media, and Likes tabs, plus follower and following lists. The edit dialog covers name, bio, location, website, avatar, and banner.
+- Search covers posts (Top, Latest, Media) and people. `#hashtags` and `@mentions` are links.
+- The sidebar shows hashtags trending over the last 7 days and follow suggestions.
+- Notifications cover likes, reposts, follows, replies, mentions, and quotes, with an unread badge.
+
+Messaging and safety:
+
+- Direct messages have an inbox, people search, paginated conversations, unread badges, read markers, and sender-side deletion. The browser encrypts every DM, and SQLite stores only signed ciphertext. A recovery code restores your keys on another device, and contacts can compare verification codes. See [the encryption docs](docs/E2EE.md).
+- Blocking removes follows in both directions and stops interactions and messages. Muting hides an account from your feeds and notifications.
+
+Other:
+
+- The versioned REST API accepts cookie or bearer authentication. It provides idempotent interactions, image uploads, cursor pagination, input validation, and rate limits that persist across restarts. See the [API docs](docs/API.md) and `/api/v1/openapi.json`.
+- Themes are light, dark, and system. The layout has three columns on desktop, an icon rail on tablets, and a bottom tab bar on phones.
 
 ## Scripts
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Start the dev server |
-| `npm run build` / `npm start` | Production build and server |
-| `npm run seed` | Wipe `data/elytra.db` and re-seed the demo data |
-| `npm run test:backend` | Run the data-layer integration checks against an in-memory database |
-| `npm run test:api` | Test all REST operations and security boundaries with isolated data and uploads |
-| `npm run test:e2ee` | Check encryption, tamper rejection, recovery, and legacy plaintext erasure |
-| `npm run lint` | ESLint |
+| `npm run dev` | Starts the dev server |
+| `npm run build` | Builds for production |
+| `npm start` | Runs the production server |
+| `npm run seed` | Wipes `data/elytra.db` and reseeds the demo data |
+| `npm run test:backend` | Runs the data-layer integration checks against an in-memory database |
+| `npm run test:api` | Tests every REST operation and security boundary with isolated data and uploads |
+| `npm run test:e2ee` | Checks encryption, tamper rejection, key recovery, and plaintext erasure |
+| `npm run lint` | Runs ESLint |
 
-## Layout
+## Code layout
 
-- `src/lib/types.ts` holds the types shared by the server and the UI.
-- `src/server/` is the backend. `data/*.ts` holds the SQL and takes a viewer ID explicitly. `queries.ts` (reads) and `actions.ts` (Server Actions) wrap it with the session from `auth.ts`.
+- `src/lib/types.ts` holds the types the server and UI share.
+- `src/server/data/*.ts` holds the SQL. Each function takes the viewer ID as an argument. `src/server/queries.ts` (reads) and `src/server/actions.ts` (Server Actions) wrap those functions with the session from `auth.ts`.
+- `src/server/api/` handles REST requests. Its endpoint registry also generates the OpenAPI 3.1 contract. The route `src/app/api/v1/[[...path]]` dispatches to it.
 - `src/app/api/media/[file]` serves uploaded images from `data/uploads`.
-- `src/app/api/v1/[[...path]]` dispatches REST requests through `src/server/api/`. The endpoint registry also generates the OpenAPI 3.1 contract.
-- `src/app/(main)` has the signed-in pages and `src/app/(auth)` has login and signup.
+- `src/app/(main)` holds the signed-in pages, and `src/app/(auth)` holds login and signup.
 - `src/components/` holds the UI components.
+
+## License
+
+[MIT](LICENSE) © 2026 vvxcrystl.

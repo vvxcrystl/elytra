@@ -376,8 +376,9 @@ export function PostCard({
 }
 
 /**
- * Reply, repost, like, bookmark and share, spread edge to edge. The detail view uses larger
- * icons and also shows the bookmark count, since it has no separate stats row.
+ * Reply, repost, like, bookmark and share, spread edge to edge, with bookmark and share grouped
+ * at the end. The detail view uses larger icons and also shows the bookmark count, since it has
+ * no separate stats row.
  */
 function ActionBar({
   engagement,
@@ -441,19 +442,22 @@ function ActionBar({
         <Heart className={clsx(icon, viewer.liked && "fill-current")} />
       </ActionButton>
 
-      <ActionButton
-        label={viewer.bookmarked ? "Remove bookmark" : "Bookmark"}
-        count={detail ? engagement.bookmarkCount : undefined}
-        active={viewer.bookmarked}
-        onClick={onBookmark}
-        tone="accent"
-      >
-        <Bookmark className={clsx(icon, viewer.bookmarked && "fill-current")} />
-      </ActionButton>
+      {/* Bookmark and share form one pair at the end, so they stay together at every width. */}
+      <div className="flex items-center gap-1">
+        <ActionButton
+          label={viewer.bookmarked ? "Remove bookmark" : "Bookmark"}
+          count={detail ? engagement.bookmarkCount : undefined}
+          active={viewer.bookmarked}
+          onClick={onBookmark}
+          tone="accent"
+        >
+          <Bookmark className={clsx(icon, viewer.bookmarked && "fill-current")} />
+        </ActionButton>
 
-      <ActionButton label="Copy link" onClick={onShare} tone="accent">
-        <Share className={icon} />
-      </ActionButton>
+        <ActionButton label="Copy link" onClick={onShare} tone="accent">
+          <Share className={icon} />
+        </ActionButton>
+      </div>
     </div>
   );
 }

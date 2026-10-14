@@ -1,17 +1,21 @@
 # Elytra REST API
 
-Base URL: `/api/v1`. Discover operations with `GET /api/v1`; import `GET /api/v1/openapi.json` into an OpenAPI 3.1 client for request and response schemas. `GET /api/v1/health` checks the database connection.
+The base URL is `/api/v1`.
 
-The API uses the same database, sessions, notifications, and feed ranking as the website. No external services or new packages are needed. Database tables and indexes migrate additively on startup, preserving existing accounts and posts.
+- `GET /api/v1` lists the operations.
+- `GET /api/v1/openapi.json` is an OpenAPI 3.1 document with request and response schemas. Import it into a client generator.
+- `GET /api/v1/health` checks the database connection.
+
+The API shares the website's database, sessions, notifications, and feed ranking. It needs no external services or new packages. Tables and indexes migrate additively on startup, so existing accounts and posts survive.
 
 ## Authentication
 
-`POST /auth/register` accepts `username`, `displayName`, and `password`. `POST /auth/login` accepts `username` and `password`. Both return:
+`POST /auth/register` takes `username`, `displayName`, and `password`. `POST /auth/login` takes `username` and `password`. Both return:
 
 ```json
 {
   "data": {
-    "user": { "id": "…", "username": "demo", "displayName": "Demo User", "…": "profile fields" },
+    "user": { "id": "...", "username": "demo", "displayName": "Demo User", "...": "profile fields" },
     "accessToken": "64-character session token",
     "tokenType": "Bearer",
     "expiresAt": "2026-11-13T12:00:00.000Z"
@@ -19,11 +23,23 @@ The API uses the same database, sessions, notifications, and feed ranking as the
 }
 ```
 
-Send `Authorization: Bearer <accessToken>` from native or server clients. Login also sets the website's `elytra_session` cookie (`HttpOnly`, `SameSite=Lax`, and `Secure` in production); same-origin browser clients can use that cookie. Tokens expire after 30 days, and only their SHA-256 hashes are stored. An explicit invalid bearer token returns 401 even if a valid cookie is also present.
+Native and server clients send `Authorization: Bearer <accessToken>`. Login also sets the website's `elytra_session` cookie (`HttpOnly`, `SameSite=Lax`, and `Secure` in production), which same-origin browser clients can use. If a request carries an invalid bearer token, it gets 401 even when it also carries a valid cookie.
 
-`POST /auth/logout` revokes the current token and clears the cookie. `DELETE /auth/sessions` revokes all sessions for the authenticated account. Usernames are case-insensitive, 3–15 letters, digits, or underscores; app route names including `messages` are reserved. Passwords are 8–1,024 characters.
+Tokens expire after 30 days. The server stores only their SHA-256 hashes.
 
-Cookie-authenticated mutations reject a mismatched `Origin` or cross-site `Sec-Fetch-Site`. JSON operations require `Content-Type: application/json`. For a reverse proxy whose internal request URL differs from the browser URL, set `ELYTRA_PUBLIC_ORIGIN` to the exact public origin, such as `https://elytra.example`. No cross-origin browser access is enabled. Bearer clients do not need an Origin header.
+`POST /auth/logout` revokes the current token and clears the cookie. `DELETE /auth/sessions` revokes every session for the authenticated account.
+
+Usernames are case-insensitive and have 3 to 15 letters, digits, or underscores. App route names such as `messages` are reserved. Passwords have 8 to 1,024 characters.
+
+### Cookie requests and proxies
+
+A cookie-authenticated write fails if its `Origin` doesn't match, or if `Sec-Fetch-Site` is cross-site. Bearer clients don't need an `Origin` header. The API enables no cross-origin browser access.
+
+JSON operations require `Content-Type: application/json`.
+
+Behind a reverse proxy, the internal request URL can differ from the URL in the browser. In that case, set `ELYTRA_PUBLIC_ORIGIN` to the exact public origin, such as `https://elytra.example`.
+
+### Example
 
 ```sh
 curl http://localhost:3000/api/v1/auth/login \
@@ -39,52 +55,96 @@ curl http://localhost:3000/api/v1/posts \
 
 ## Responses and pagination
 
-Single resources and mutations return `{ "data": … }`. Collections return `{ "data": […], "meta": { "nextCursor": "…" } }`. Pass `limit=1..100` (default 20) and the opaque `cursor` to load more. Stop when `nextCursor` is null. Keep the same account and filters when continuing a cursor.
-
-Feeds use frozen snapshots so posts, likes, and reposts added after page one do not shift subsequent pages. Feed cursors expire after 24 hours. Removed activity, dismissed posts, blocks, and mutes take effect on existing snapshots. Other collections use keyset pagination: inbox activity can move a conversation into a newer page, so clients should deduplicate conversation IDs when polling. People lists sort by username; notifications and related posts sort newest first. Messages sort by insertion sequence, newest first, with strictly increasing timestamps within a conversation.
-
-Dates are UTC ISO 8601 strings. Resource IDs are opaque strings. Errors return:
+A single resource or a mutation returns `{ "data": ... }`. A collection returns:
 
 ```json
-{ "error": { "code": "validation_error", "message": "Invalid request fields", "details": { "content": "Length must be 0–280" } } }
+{ "data": [], "meta": { "nextCursor": "..." } }
 ```
 
-Status codes: 400 for invalid input/cursors, 401 for missing or invalid authentication, 403 for forbidden operations, 404 for missing or inaccessible resources, 405 for an unsupported method, 409 for conflicts, 413 for oversized bodies, 415 for unsupported content types, and 429 for rate limits. Server failures use a generic 500 message; `X-Request-Id` correlates it with server logs. All responses use `Cache-Control: no-store`. HEAD and OPTIONS are supported.
+Pass `limit` (1 to 100, default 20) and the opaque `cursor` to load more. Stop when `nextCursor` is null. When you continue a cursor, use the same account and filters.
 
-Unknown JSON fields, unknown query parameters, duplicate query parameters, wrong types, and invalid IDs are rejected. JSON bodies are limited to 64 KiB, except encrypted-message requests (128 KiB for two encrypted copies). Character limits count Unicode code points for posts and messages, including emoji.
+### How pages stay stable
+
+Feeds use frozen snapshots. Posts, likes, and reposts added after page one don't shift later pages. Feed cursors expire after 24 hours. Removed activity, dismissed posts, blocks, and mutes still apply to an existing snapshot.
+
+Other collections use keyset pagination:
+
+- Inbox activity can move a conversation onto a newer page, so deduplicate conversation IDs when you poll.
+- People lists sort by username.
+- Notifications and related posts sort newest first.
+- Messages sort newest first by insertion sequence. Timestamps within a conversation strictly increase.
+
+### Formats and errors
+
+Dates are UTC ISO 8601 strings. Resource IDs are opaque strings. An error looks like this:
+
+```json
+{ "error": { "code": "validation_error", "message": "Invalid request fields", "details": { "content": "Length must be 0 to 280" } } }
+```
+
+| Status | Meaning |
+| --- | --- |
+| 400 | Invalid input or cursor |
+| 401 | Missing or invalid authentication |
+| 403 | Forbidden operation |
+| 404 | Missing or inaccessible resource |
+| 405 | Unsupported method |
+| 409 | Conflict |
+| 413 | Body too large |
+| 415 | Unsupported content type |
+| 429 | Rate limited |
+
+A server failure returns a generic 500 message. The `X-Request-Id` header lets you find the matching entry in the server logs. Every response sets `Cache-Control: no-store`. HEAD and OPTIONS work.
+
+### Strict validation
+
+The API rejects unknown JSON fields, unknown or duplicate query parameters, wrong types, and invalid IDs.
+
+JSON bodies can be up to 64 KiB. Encrypted-message requests can be up to 128 KiB, enough for two encrypted copies. Character limits for posts and messages count Unicode code points, so an emoji counts as one.
 
 ## Posts and feeds
 
-- `GET /timeline?tab=for-you|following`: authenticated home feed. For You shares the website's recommendation model; Following is chronological.
-- `GET /posts?q=…&tab=top|latest|media`: public search; `q` is required, up to 500 characters. `#tag` and `@username` searches use indexed tags and mentions.
-- `POST /posts`: authenticated creation. Fields: optional `content` (280 characters), `replyToId`, `quoteId`, `mediaIds` (up to four). A post needs content, images, or a quote.
-- `GET /posts/:id`: a post with its author, images, optional quote/parent, counts, and viewer interaction flags.
-- `DELETE /posts/:id`: author only. Removes activity and images; replies survive and quotes become tombstones.
-- `GET /posts/:id/thread`: ancestors, target, and immediate replies. For large conversations, page replies separately.
-- `GET /posts/:id/replies`, `/quotes`: paginated related posts.
-- `GET /posts/:id/likes`, `/reposts`: paginated accounts that interacted. Bookmark owners are private.
-- `PUT /posts/:id/like`, `/repost`, `/bookmark`: set the interaction. `DELETE` removes it. These are idempotent and return `{active, count}`; repeated requests do not toggle or duplicate notifications.
-- `GET /bookmarks`: authenticated private bookmark feed.
-- `PUT /posts/:id/not-interested`: dismiss a recommendation and update author preference signals.
-- `POST /impressions` with `{postIds: […]}`: record up to 100 seen posts. Duplicate IDs are deduplicated; removed posts are ignored.
-- `GET /trends?limit=…`: hashtag counts, preferring the last seven days, with an all-time fallback.
+- `GET /timeline?tab=for-you|following` returns the authenticated home feed. For You uses the website's recommendation model. Following is chronological.
+- `GET /posts?q=...&tab=top|latest|media` searches public posts. `q` is required and has at most 500 characters. Searches for `#tag` and `@username` use indexed tags and mentions.
+- `POST /posts` creates a post. All fields are optional: `content` (280 characters), `replyToId`, `quoteId`, and `mediaIds` (up to four). A post needs content, images, or a quote.
+- `GET /posts/:id` returns a post with its author, images, optional quote or parent, counts, and the viewer's interaction flags.
+- `DELETE /posts/:id` is for the author only. It removes the post's activity and images. Replies stay, and quotes of the post become tombstones.
+- `GET /posts/:id/thread` returns the ancestors, the target post, and its immediate replies. For a large conversation, page the replies separately.
+- `GET /posts/:id/replies` and `GET /posts/:id/quotes` return paginated related posts.
+- `GET /posts/:id/likes` and `GET /posts/:id/reposts` return paginated accounts that interacted. Bookmark owners are private.
+- `PUT /posts/:id/like`, `PUT /posts/:id/repost`, and `PUT /posts/:id/bookmark` set the interaction. `DELETE` on the same path removes it. These calls are idempotent and return `{active, count}`. A repeated request doesn't toggle the state or send a second notification.
+- `GET /bookmarks` returns your private bookmark feed.
+- `PUT /posts/:id/not-interested` dismisses a recommendation and updates your preference signals for that author.
+- `POST /impressions` with `{postIds: [...]}` records up to 100 seen posts. It deduplicates IDs and ignores removed posts.
+- `GET /trends?limit=...` returns hashtag counts. It prefers the last seven days and falls back to all time.
 
 ## People and profiles
 
-- `GET /users?q=…`: paginated people search (optional query, up to 100 characters).
-- `GET /users/suggestions?limit=…`: follow suggestions.
-- `GET /users/:id`, `/users/by-username/:username`: public profile, follower/following/post counts, viewer follow flags, and `isBlocked`, `blockedBy`, `isMuted`.
-- `GET /users/me`: authenticated profile.
-- `PATCH /users/me`: partial edit. Fields: `displayName` (1–50), `bio` (160), `location` (30), `website` (100, http/https), `avatarMediaId`, `bannerMediaId`, `removeAvatar`, `removeBanner`. Unspecified fields keep their current values.
-- `GET /users/:id/posts?tab=posts|replies|media|likes`: profile feed. Replies follows the existing website's tab behavior and includes all authored posts.
-- `GET /users/:id/followers`, `/following`: paginated connections.
-- `PUT /users/:id/follow`, `DELETE /users/:id/follow`: idempotent follow/unfollow, returning `{following}`.
+- `GET /users?q=...` searches people with pagination. The optional query has at most 100 characters.
+- `GET /users/suggestions?limit=...` returns follow suggestions.
+- `GET /users/:id` and `GET /users/by-username/:username` return a public profile with follower, following, and post counts, the viewer's follow flags, and `isBlocked`, `blockedBy`, and `isMuted`.
+- `GET /users/me` returns your profile.
+- `PATCH /users/me` edits your profile. Fields you omit keep their values. The fields are:
+  - `displayName` (1 to 50 characters)
+  - `bio` (160)
+  - `location` (30)
+  - `website` (100, http or https)
+  - `avatarMediaId` and `bannerMediaId`
+  - `removeAvatar` and `removeBanner`
+- `GET /users/:id/posts?tab=posts|replies|media|likes` returns a profile feed. The replies tab matches the website and includes all of the user's posts.
+- `GET /users/:id/followers` and `GET /users/:id/following` return paginated connections.
+- `PUT /users/:id/follow` and `DELETE /users/:id/follow` follow and unfollow idempotently. They return `{following}`.
 
 ## Images
 
-`POST /media` requires authentication and multipart form fields `file` and optional `purpose` (`post`, `avatar`, `banner`; default `post`). Accepts PNG, JPEG, GIF, or WebP, 1 byte to 5 MiB; MIME type and signature must match. The multipart body itself is limited to 5 MiB plus 64 KiB of overhead.
+`POST /media` requires authentication and takes multipart form fields `file` and `purpose`. The `purpose` is optional and can be `post`, `avatar`, or `banner` (default `post`).
 
-The response contains `{id, url, type, size, purpose, claimed, createdAt}`. Use the ID in `POST /posts` or `PATCH /users/me`. Uploads belong to their uploader and can only be claimed once, for their declared purpose. Claims and resource writes are transactional; a failed post or profile edit leaves the upload available. Arbitrary image URLs are not accepted by the API.
+- The file must be PNG, JPEG, GIF, or WebP, from 1 byte to 5 MiB. The MIME type and the file signature must agree.
+- The whole multipart body is limited to 5 MiB plus 64 KiB of overhead.
+
+The response is `{id, url, type, size, purpose, claimed, createdAt}`. Pass the ID to `POST /posts` or `PATCH /users/me`.
+
+An upload belongs to the user who made it, and it can be claimed once, for its declared purpose. Claims and resource writes are transactional, so a failed post or profile edit leaves the upload available. The API doesn't accept arbitrary image URLs.
 
 ```sh
 curl http://localhost:3000/api/v1/media \
@@ -98,57 +158,104 @@ curl http://localhost:3000/api/v1/posts \
   -d '{"content":"A photo","mediaIds":["MEDIA_ID"]}'
 ```
 
-`GET /media/:id` inspects your upload. `DELETE /media/:id` removes an unattached upload and its file; attached uploads return 409. Delete the owning post or replace/remove the profile image to remove attached files. Delete abandoned pending uploads explicitly; there is no scheduled upload expiry. Image bytes remain at the existing public `/api/media/:filename` route, with immutable caching.
+`GET /media/:id` shows one of your uploads. `DELETE /media/:id` removes an unattached upload and its file. It returns 409 for an attached upload. To remove an attached file, delete the owning post or replace or remove the profile image.
+
+Uploads never expire on a schedule, so delete abandoned ones yourself. The image bytes are served from the public `/api/media/:filename` route with immutable caching.
 
 ## Notifications
 
-- `GET /notifications?filter=all|mentions`: authenticated, paginated. Mentions includes mentions and replies.
-- `GET /notifications/unread-count`: `{unreadCount}`.
-- `PUT /notifications/read`: mark all read.
-- `PUT /notifications/:id/read`: mark your notification read. Other users' IDs return 404.
+- `GET /notifications?filter=all|mentions` returns paginated notifications. The `mentions` filter includes mentions and replies.
+- `GET /notifications/unread-count` returns `{unreadCount}`.
+- `PUT /notifications/read` marks all notifications read.
+- `PUT /notifications/:id/read` marks one of your notifications read. Another user's ID returns 404.
 
 ## Direct messages
 
-The UI is at `/messages`, where users generate keys and save a separate recovery code. A new browser must restore the same keys; no key-reset or plaintext fallback exists. Key endpoints require authentication:
+The UI is at `/messages`. There, users generate keys and save a separate recovery code. A new browser must restore the same keys. There is no key reset and no plaintext fallback.
 
-- `PUT /users/me/encryption-keys`: publish `{keyId, encryptionPublicKey, signingPublicKey, backupIv, backupCiphertext, proof}`. Public keys are canonical P-256 SPKI DER, encoded as unpadded base64url. The proof signs the account-bound registration, and keys are immutable. Replacing an existing identity/backup returns 409.
-- `GET /users/:id/encryption-keys`: `{userId, keyId, encryptionPublicKey, signingPublicKey}`, or null if not enabled. No private-key backup is returned here.
-- `GET /users/me/encryption-backup`: your public identity plus `{backupIv, backupCiphertext}`, or null. Decrypt it on the device with the independent recovery code, never on the server.
+### Encryption keys
 
-Messaging endpoints also require authentication:
+These endpoints require authentication.
 
-- `GET /conversations`: paginated inbox, newest activity first.
-- `POST /conversations` with `{recipientId}`: create a one-to-one conversation (201), or retrieve the existing conversation (200). Conversation uniqueness is symmetric: both participants get the same ID.
-- `GET /conversations/unread-count`: unread message count across the whole inbox, excluding blocked/muted senders.
-- `GET /conversations/:id`: participant summary, last message, unread count, blocked/muted flags, and activity timestamp.
-- `GET /conversations/:id/messages`: paginated messages, newest first.
-- `POST /conversations/:id/messages` with `{encryption: …}`: send a signed E2EE envelope (201). The plaintext `{content}` contract is rejected. The browser encrypts 1–10,000 characters locally; the server bounds ciphertext sizes and verifies the signature. Identical signed retries with the same client ID return the original message without duplication.
-- `PUT /conversations/:id/read` with `{upToMessageId}`: mark read through a message you have fetched. The marker never moves backwards. Omitting the ID marks all messages currently present; provide an ID to avoid marking a concurrently arriving message read.
-- `DELETE /messages/:id`: sender-only removal for both participants.
+- `PUT /users/me/encryption-keys` publishes `{keyId, encryptionPublicKey, signingPublicKey, backupIv, backupCiphertext, proof}`.
+  - Public keys are canonical P-256 SPKI DER, encoded as unpadded base64url.
+  - The proof signs the account-bound registration.
+  - Keys can't be changed. Replacing an existing identity or backup returns 409.
+- `GET /users/:id/encryption-keys` returns `{userId, keyId, encryptionPublicKey, signingPublicKey}`, or null if the user hasn't enabled messaging. It never returns the private-key backup.
+- `GET /users/me/encryption-backup` returns your public identity plus `{backupIv, backupCiphertext}`, or null. Decrypt the backup on the device with the independent recovery code, never on the server.
 
-Only the two participants can read, send, or mark read. Nonparticipants receive 404, concealing whether the conversation/message exists. A participant attempting to delete the other person's message gets 403. Existing history remains readable after a block; new conversations and sends are forbidden in either direction. The UI polls rather than using a streaming connection.
+### Conversations and messages
 
-Messages are **end-to-end encrypted** on devices using P-256 ECDH, HKDF-SHA-256, AES-256-GCM, and ECDSA signatures. The server stores ciphertext and an encrypted key backup; it never receives message text, private keys, or the recovery code. Both participants must first publish their messaging identities. See [E2EE protocol and recovery](E2EE.md). HTTPS is still required in deployment. The API supports one-to-one text messages; group chats, attachments, typing indicators, delivered receipts, and push delivery are outside this version.
+These endpoints also require authentication.
+
+- `GET /conversations` returns the paginated inbox, newest activity first.
+- `POST /conversations` with `{recipientId}` creates a one-to-one conversation and returns 201. If one exists, it returns that conversation with 200. Both participants get the same conversation ID.
+- `GET /conversations/unread-count` returns the unread message count across the inbox, excluding blocked and muted senders.
+- `GET /conversations/:id` returns the participant summary, last message, unread count, blocked and muted flags, and activity timestamp.
+- `GET /conversations/:id/messages` returns paginated messages, newest first.
+- `POST /conversations/:id/messages` with `{encryption: ...}` sends a signed E2EE envelope and returns 201.
+  - The server rejects the plaintext `{content}` form.
+  - The browser encrypts 1 to 10,000 characters locally. The server bounds the ciphertext sizes and verifies the signature.
+  - Retrying an identical signed message with the same client ID returns the original message and creates no duplicate.
+- `PUT /conversations/:id/read` with `{upToMessageId}` marks messages read through a message you have fetched. The marker never moves backwards. If you omit the ID, the server marks every message present at that moment. Send an ID to avoid marking a message that arrives concurrently.
+- `DELETE /messages/:id` is for the sender only and removes the message for both participants.
+
+Only the two participants can read, send, or mark messages read. Anyone else gets 404, which hides whether the conversation or message exists. A participant who tries to delete the other person's message gets 403.
+
+After a block, existing history stays readable, but new conversations and new messages are forbidden in both directions. The UI polls for updates. There is no streaming connection.
+
+### Encryption summary
+
+Messages are end-to-end encrypted on the devices with P-256 ECDH, HKDF-SHA-256, AES-256-GCM, and ECDSA signatures. The server stores ciphertext and an encrypted key backup. It never receives message text, private keys, or the recovery code. Both participants must publish their messaging identities first. Deployments still need HTTPS. See [E2EE protocol and recovery](E2EE.md).
+
+The API supports one-to-one text messages only. It has no group chats, attachments, typing indicators, delivery receipts, or push delivery.
 
 ## Blocking and muting
 
-`PUT /users/:id/block` / `DELETE /users/:id/block` return `{blocked}`. Blocks remove follows and notifications in both directions, prevent follows, post interactions, replies, quotes, and messages, and hide either participant's posts from the other. Quoted blocked posts render as unavailable tombstones. Public profile metadata stays accessible. Unblocking does not restore follows.
+`PUT /users/:id/block` and `DELETE /users/:id/block` return `{blocked}`.
 
-`PUT /users/:id/mute` / `DELETE /users/:id/mute` return `{muted}`. Mutes are viewer-only: home and search feeds and notifications hide that account; notification delivery and the message badge suppress muted senders. Explicit profile/post reads, saved bookmarks, and messaging remain available.
+A block:
 
-`GET /users/me/blocks` and `/users/me/mutes` are private paginated management lists. Blocking/muting yourself returns 400. All relationship mutations are idempotent.
+- removes follows and notifications in both directions
+- prevents follows, post interactions, replies, quotes, and messages
+- hides each person's posts from the other
+- shows quoted blocked posts as unavailable tombstones
+
+Public profile metadata stays accessible. Unblocking doesn't restore follows.
+
+`PUT /users/:id/mute` and `DELETE /users/:id/mute` return `{muted}`. A mute applies to the viewer only. It hides the account from home feeds, search feeds, and notifications, and it stops notification delivery and the message badge for that sender. You can still read the account's profile and posts directly, keep its saved bookmarks, and message it.
+
+`GET /users/me/blocks` and `GET /users/me/mutes` return your private, paginated management lists. Blocking or muting yourself returns 400. All relationship changes are idempotent.
 
 ## Rate limits and configuration
 
-SQLite-backed fixed-window quotas survive server restarts and are shared across workers using the same database:
+Quotas use fixed windows stored in SQLite. They survive restarts and are shared by all workers that use the same database.
 
-- Authenticated: 600 reads and 120 mutations per account per minute.
-- Anonymous: 600 reads and 60 mutations per minute, shared across anonymous callers.
-- Login: 60 attempts per minute globally, plus 10 per username per 15 minutes (successful logins count).
-- Registration: 20 requests per hour globally.
+| Scope | Limit |
+| --- | --- |
+| Authenticated reads | 600 per account per minute |
+| Authenticated mutations | 120 per account per minute |
+| Anonymous reads | 600 per minute, shared by all anonymous callers |
+| Anonymous mutations | 60 per minute, shared by all anonymous callers |
+| Login | 60 attempts per minute globally, and 10 per username per 15 minutes (successful logins count) |
+| Registration | 20 requests per hour globally |
 
-Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` (Unix seconds) for the general quota. On 429, use `Retry-After` in seconds. Login/registration quotas may be stricter than the general quota. Anonymous limits intentionally do not trust spoofable forwarded IP headers.
+Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` (Unix seconds) for the general quota. Login and registration quotas can be stricter than the general one. On a 429, wait the number of seconds in `Retry-After`. Anonymous limits don't trust forwarded IP headers, because clients can spoof them.
 
-`ELYTRA_DB_PATH` selects the SQLite database (default `data/elytra.db`); `ELYTRA_UPLOAD_DIR` selects uploads (default `data/uploads`); `ELYTRA_PUBLIC_ORIGIN` configures cookie mutation origin checks behind a proxy. The API uses the Node.js runtime and persistent local storage, like the website. Sessions are first-party session tokens, not OAuth access tokens. Lists, OAuth apps, protected accounts, password resets, and streaming APIs are not implemented.
+### Environment variables
 
-Run `npm run test:api` for all 59 operations, schema validation, access checks, cursors, blocking/muting, media ownership/rollback/cleanup, rate limits, and migrations. Tests use an in-memory database and a temporary upload directory. `npm run test:backend` checks existing backend behavior and recommendation performance. `npm run test:e2ee` checks sender/recipient decryption, signature and ciphertext tampering, recovery, Unicode bounds, and removal of legacy bodies from database/WAL files.
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `ELYTRA_DB_PATH` | SQLite database file | `data/elytra.db` |
+| `ELYTRA_UPLOAD_DIR` | Upload directory | `data/uploads` |
+| `ELYTRA_PUBLIC_ORIGIN` | Public origin for cookie write checks behind a proxy | unset |
+
+Like the website, the API runs on the Node.js runtime and needs persistent local storage.
+
+Sessions are first-party tokens, not OAuth access tokens. The API has no lists, OAuth apps, protected accounts, password resets, or streaming.
+
+## Tests
+
+- `npm run test:api` covers all 59 operations, schema validation, access checks, cursors, blocking and muting, media ownership, rollback and cleanup, rate limits, and migrations. It uses an in-memory database and a temporary upload directory.
+- `npm run test:backend` checks existing backend behavior and recommendation performance.
+- `npm run test:e2ee` checks sender and recipient decryption, signature and ciphertext tampering, recovery, Unicode bounds, and removal of legacy bodies from the database and WAL files.
