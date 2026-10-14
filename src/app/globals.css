@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Brand colours: #403457 (deep violet) and #c5a7ff (lavender). Both sit at hue 299 in OKLCH,
+ * so every surface below is a shade of one of them.
+ *   --accent      button and badge fill (#c5a7ff in both themes)
+ *   --accent-fg   text on that fill (#403457 in both themes)
+ *   --accent-ink  links, highlighted icons, the logo, focus rings
+ */
+
+/* Light theme: pale #c5a7ff tints, #403457 ink */
+:root {
+  --bg: oklch(0.988 0.007 299);
+  --bg-elevated: oklch(1 0 0);
+  --bg-hover: oklch(0.965 0.016 299);
+  --bg-muted: oklch(0.948 0.026 299);
+  --border: oklch(0.9 0.04 299);
+  --fg: oklch(0.21 0.02 299);
+  --fg-muted: oklch(0.48 0.04 299);
+  --fg-subtle: oklch(0.6 0.045 299);
+  --accent: #c5a7ff;
+  --accent-hover: oklch(0.74 0.14 299);
+  --accent-fg: #403457;
+  --accent-soft: oklch(0.787 0.126 299 / 0.24);
+  --accent-ink: #403457;
+  --like: oklch(0.6 0.23 15);
+  --like-soft: oklch(0.6 0.23 15 / 0.1);
+  --repost: oklch(0.6 0.15 155);
+  --repost-soft: oklch(0.6 0.15 155 / 0.1);
+  --danger: oklch(0.58 0.22 25);
+  --overlay: oklch(0.354 0.061 299 / 0.4);
+  --orb-1: oklch(0.787 0.126 299 / 0.45);
+  --orb-2: oklch(0.62 0.16 299 / 0.28);
+  --orb-3: oklch(0.7 0.12 330 / 0.22);
+  color-scheme: light;
+}
+
+/* Dark theme: deep #403457 shades, #c5a7ff ink */
+[data-theme="dark"] {
+  --bg: oklch(0.2 0.032 299);
+  --bg-elevated: oklch(0.245 0.042 299);
+  --bg-hover: oklch(0.25 0.042 299);
+  --bg-muted: oklch(0.285 0.05 299);
+  --border: #403457;
+  --fg: oklch(0.96 0.012 299);
+  --fg-muted: oklch(0.76 0.035 299);
+  --fg-subtle: oklch(0.63 0.045 299);
+  --accent: #c5a7ff;
+  --accent-hover: oklch(0.84 0.1 299);
+  --accent-fg: #403457;
+  --accent-soft: oklch(0.787 0.126 299 / 0.14);
+  --accent-ink: #c5a7ff;
+  --like: oklch(0.7 0.2 10);
+  --like-soft: oklch(0.7 0.2 10 / 0.14);
+  --repost: oklch(0.76 0.14 160);
+  --repost-soft: oklch(0.76 0.14 160 / 0.14);
+  --danger: oklch(0.68 0.19 25);
+  --overlay: oklch(0.1 0.03 299 / 0.65);
+  /* Saturated and darker than the light set: pale lavender at low alpha turns grey on a dark background. */
+  --orb-1: oklch(0.48 0.15 299 / 0.45);
+  --orb-2: oklch(0.44 0.15 285 / 0.4);
+  --orb-3: oklch(0.46 0.13 315 / 0.26);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-muted: var(--bg-muted);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-like: var(--like);
+  --color-like-soft: var(--like-soft);
+  --color-repost: var(--repost);
+  --color-repost-soft: var(--repost-soft);
+  --color-danger: var(--danger);
+  --color-overlay: var(--overlay);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background: var(--overlay);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-accent text-accent-fg hover:bg-accent-hover;
+}
+
+@utility btn-inverse {
+  @apply btn bg-fg text-bg hover:opacity-90;
+}
+
+@utility btn-outline {
+  @apply btn border border-border bg-transparent text-fg hover:bg-bg-hover;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-border bg-transparent px-3 py-2.5 text-[15px] text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-accent-ink focus:ring-1 focus:ring-accent-ink;
+}
+
+/* Slow drift for the blurred circles behind the sign-in and onboarding screens (components/backdrop.tsx). */
+@keyframes orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(4%, -3%) scale(1.06); }
+  66% { transform: translate(-3%, 4%) scale(0.96); }
+}
+
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
