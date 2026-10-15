@@ -94,7 +94,7 @@ export default async function ProfileLayout({ params, children }: LayoutProps<"/
                 href={profile.website}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="text-accent-ink hover:underline"
+                className="text-link hover:underline"
               >
                 {displayUrl(profile.website)}
               </a>

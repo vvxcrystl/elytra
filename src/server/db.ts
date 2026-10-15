@@ -4,21 +4,22 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { seedDatabase } from "./seed";
 import { migrateMessageStorage } from "./message-migration";
+import { migrateBackend } from "./db-migrations";
+import { backendConfig } from "./config";
 
 const globalDb = globalThis as typeof globalThis & { elytraDb?: DatabaseSync };
 // A module-local guard runs additive migrations again after HMR even if the
 // running dev server keeps its original connection on globalThis.
 const configured = new WeakSet<DatabaseSync>();
-export function getDb(): DatabaseSync {
-  if (globalDb.elytraDb && configured.has(globalDb.elytraDb)) return globalDb.elytraDb;
-  const path = process.env.ELYTRA_DB_PATH || resolve(process.cwd(), "data/elytra.db");
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = globalDb.elytraDb || new DatabaseSync(path);
+function initializeDatabase(db: DatabaseSync): void {
   db.function("unicode_lower", { deterministic: true }, value => String(value ?? "").toLowerCase());
   db.exec(`
     PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = FULL;
     PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 5000;
+    PRAGMA busy_timeout = ${backendConfig().busyTimeoutMs};
+    PRAGMA cache_size = -16384;
+    PRAGMA journal_size_limit = 67108864;
     PRAGMA secure_delete = ON;
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, username TEXT NOT NULL, username_lower TEXT NOT NULL UNIQUE,
@@ -162,17 +163,53 @@ export function getDb(): DatabaseSync {
     db.exec("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0");
     db.prepare("UPDATE users SET verified=1 WHERE username_lower='crystl'").run();
   }
+}
+export function getDb(): DatabaseSync {
+  if (globalDb.elytraDb && configured.has(globalDb.elytraDb)) return globalDb.elytraDb;
+  const path = process.env.ELYTRA_DB_PATH || resolve(process.cwd(), "data/elytra.db");
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  const db = globalDb.elytraDb || new DatabaseSync(path);
   try {
+    initializeDatabase(db);
     migrateMessageStorage(db);
+    migrateBackend(db);
     if (process.env.ELYTRA_SEED_DEMO !== "false" && !db.prepare("SELECT id FROM users LIMIT 1").get()) seedDatabase(db);
     globalDb.elytraDb = db;
     configured.add(db);
     return db;
   } catch (error) { if (globalDb.elytraDb === db) globalDb.elytraDb = undefined; db.close(); throw error; }
 }
-export function transaction<T>(fn: () => T): T {
+type Statement = ReturnType<DatabaseSync["prepare"]>;
+const statements = new WeakMap<DatabaseSync, Map<string, Statement>>();
+export function statement(sql: string): Statement {
   const db = getDb();
-  db.exec("BEGIN IMMEDIATE");
-  try { const result = fn(); db.exec("COMMIT"); return result; }
-  catch (error) { db.exec("ROLLBACK"); throw error; }
+  let cache = statements.get(db);
+  if (!cache) { cache = new Map(); statements.set(db, cache); }
+  let prepared = cache.get(sql);
+  if (prepared) cache.delete(sql);
+  else prepared = db.prepare(sql);
+  const max = backendConfig().statementCacheSize;
+  if (max > 0) {
+    cache.set(sql, prepared);
+    if (cache.size > max) cache.delete(cache.keys().next().value!);
+  }
+  return prepared;
+}
+export function statementCacheEntries(): number { return statements.get(getDb())?.size ?? 0; }
+
+const depths = new WeakMap<DatabaseSync, number>();
+export function transaction<T>(fn: () => T): T {
+  const db = getDb(), depth = depths.get(db) ?? 0;
+  const savepoint = `elytra_${depth}`;
+  db.exec(depth ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
+  depths.set(db, depth + 1);
+  try {
+    const result = fn();
+    if (result && typeof (result as { then?: unknown }).then === "function") throw new Error("Database transactions must be synchronous");
+    db.exec(depth ? `RELEASE ${savepoint}` : "COMMIT");
+    return result;
+  } catch (error) {
+    db.exec(depth ? `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}` : "ROLLBACK");
+    throw error;
+  } finally { depths.set(db, depth); }
 }

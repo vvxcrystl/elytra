@@ -34,7 +34,7 @@ import { QuoteCard } from "./quote-card";
 import { RelativeTime } from "./relative-time";
 import { RichText } from "./rich-text";
 import { useToast } from "./toast";
-import { useViewer } from "./viewer-context";
+import { useOptionalViewer } from "./viewer-context";
 
 type Variant = "feed" | "ancestor" | "detail";
 
@@ -72,7 +72,7 @@ export function PostCard({
   connectBelow?: boolean;
 }) {
   const router = useRouter();
-  const viewer = useViewer();
+  const viewer = useOptionalViewer();
   const toast = useToast();
   const openCompose = useCompose();
   const [, startTransition] = useTransition();
@@ -90,10 +90,11 @@ export function PostCard({
   if (deleted) return null;
 
   const href = postHref(post);
-  const isOwn = post.author.id === viewer.id;
+  const isOwn = post.author.id === viewer?.id;
   const detail = variant === "detail";
 
   function onLike() {
+    if (!viewer) return router.push("/login");
     if (likePending.current) return;
     likePending.current = true;
     const prev = engagement;
@@ -120,6 +121,7 @@ export function PostCard({
   }
 
   function onRepost() {
+    if (!viewer) return router.push("/login");
     const prev = engagement;
     const reposted = !prev.viewer.reposted;
     setEngagement({
@@ -143,6 +145,7 @@ export function PostCard({
   }
 
   function onBookmark() {
+    if (!viewer) return router.push("/login");
     const prev = engagement;
     const bookmarked = !prev.viewer.bookmarked;
     setEngagement({
@@ -209,7 +212,7 @@ export function PostCard({
     showReplyContext && post.replyToUsername ? (
       <p className="text-[15px] text-fg-muted">
         Replying to{" "}
-        <Link href={`/${post.replyToUsername}`} className="text-accent-ink hover:underline">
+        <Link href={`/${post.replyToUsername}`} className="text-link hover:underline">
           @{post.replyToUsername}
         </Link>
       </p>
@@ -222,7 +225,7 @@ export function PostCard({
         ...(isOwn
           ? [{ label: "Delete", danger: true, icon: <Trash2 className="size-[18px]" />, onSelect: onDelete }]
           : []),
-        ...(!isOwn && !detail
+        ...(viewer && !isOwn && !detail
           ? [
               {
                 label: "Not interested in this post",
@@ -265,9 +268,9 @@ export function PostCard({
     <ActionBar
       engagement={engagement}
       detail={detail}
-      onReply={() => openCompose({ replyTo: post })}
+      onReply={() => viewer ? openCompose({ replyTo: post }) : router.push("/login")}
       onRepost={onRepost}
-      onQuote={() => openCompose({ quote: post })}
+      onQuote={() => viewer ? openCompose({ quote: post }) : router.push("/login")}
       onLike={onLike}
       onBookmark={onBookmark}
       onShare={copyLink}
@@ -281,7 +284,7 @@ export function PostCard({
           <Link href={`/${post.author.username}`}>
             <Avatar user={post.author} />
           </Link>
-          <div className="min-w-0 flex-1 leading-5">
+          <div className="min-w-0 flex-1 text-[15px] leading-5">
             <Link
               href={`/${post.author.username}`}
               className="block truncate font-bold hover:underline"
@@ -328,7 +331,7 @@ export function PostCard({
             <Repeat2 className="size-4" />
           </div>
           <Link href={`/${repostedBy.username}`} className="truncate hover:underline">
-            {repostedBy.id === viewer.id ? "You" : repostedBy.displayName} reposted
+            {repostedBy.id === viewer?.id ? "You" : repostedBy.displayName} reposted
           </Link>
         </div>
       )}
@@ -399,7 +402,8 @@ function ActionBar({
   onBookmark: () => void;
   onShare: () => void;
 }) {
-  const icon = detail ? "size-[22px]" : "size-[18px]";
+  // X's glyphs are small and thin; a lighter stroke at a smaller size matches that look.
+  const icon = clsx(detail ? "size-5" : "size-4", "[stroke-width:1.75]");
   const { viewer } = engagement;
 
   return (

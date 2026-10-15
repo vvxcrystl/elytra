@@ -9,10 +9,14 @@ export function ViewerProvider({
   viewer,
   children,
 }: {
-  viewer: Viewer;
+  viewer: Viewer | null;
   children: React.ReactNode;
 }) {
   return <ViewerContext value={viewer}>{children}</ViewerContext>;
+}
+
+export function useOptionalViewer(): Viewer | null {
+  return useContext(ViewerContext);
 }
 
 export function useViewer(): Viewer {

@@ -27,6 +27,10 @@ docker compose up -d --build
 
 Then point the tunnel's published hostname at `http://app:3000`. The database and uploads persist in a Docker volume, and the app starts with no demo accounts. The [hosting guide](docs/HOSTING.md) covers the Cloudflare steps, backups, and hosting without Docker.
 
+## Backend capacity
+
+The backend uses bounded asynchronous password work, request/upload admission limits, indexed SQLite queries with transaction-maintained engagement counters, capped feed snapshots, batched messaging reads, and streamed media. See the [backend operations guide](docs/BACKEND.md) for concurrency budgets, proxy setup, migrations, health checks, load testing, and the single-host scaling limits.
+
 ## Features
 
 Accounts and posting:
@@ -64,6 +68,9 @@ Other:
 | `npm run test:backend` | Runs the data-layer integration checks against an in-memory database |
 | `npm run test:api` | Tests every REST operation and security boundary with isolated data and uploads |
 | `npm run test:e2ee` | Checks encryption, tamper rejection, key recovery, and plaintext erasure |
+| `npm run test:concurrency` | Tests overload recovery, body deadlines, concurrent writes, retention, and streaming with isolated files |
+| `npm run seed:load` | Creates a new isolated load-test database and private fixture tokens |
+| `npm run load:api` | Measures mixed HTTP traffic against an explicitly configured test server |
 | `npm run lint` | Runs ESLint |
 
 ## Code layout

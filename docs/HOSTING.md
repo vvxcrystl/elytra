@@ -57,7 +57,7 @@ docker compose down                # Stop, keeping the database and uploads
 
 Both services restart when Docker starts. Accounts, posts, sessions, and uploads live in the `elytra-data` named volume. Don't run `docker compose down -v` unless you want to erase that volume.
 
-Run only one app instance. SQLite and the uploads are local to the volume.
+Run only one app instance. SQLite and the uploads are local to the volume. The [backend operations guide](BACKEND.md) covers request budgets, rate-limit proxy identity, migrations, health checks, and isolated load testing. The Compose app trusts Cloudflare's `CF-Connecting-IP` header; keep its port reachable only through the tunnel.
 
 ### Back up
 

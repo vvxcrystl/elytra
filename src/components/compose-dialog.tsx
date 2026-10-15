@@ -82,7 +82,7 @@ export function ComposeProvider({ children }: { children: React.ReactNode }) {
                     </div>
                     <p className="text-[15px] break-words whitespace-pre-wrap">{replyTo.content}</p>
                     <p className="mt-3 text-[15px] text-fg-muted">
-                      Replying to <span className="text-accent-ink">@{replyTo.author.username}</span>
+                      Replying to <span className="text-link">@{replyTo.author.username}</span>
                     </p>
                   </div>
                 </div>

@@ -9,7 +9,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export function ShowMoreLink({ href }: { href: string }) {
   return (
-    <Link href={href} className="block px-4 py-4 text-[15px] text-accent-ink transition-colors hover:bg-bg-hover">
+    <Link href={href} className="block px-4 py-4 text-[15px] text-link transition-colors hover:bg-bg-hover">
       Show more
     </Link>
   );
@@ -19,9 +19,10 @@ export function TrendLink({ trend, rank }: { trend: Trend; rank?: number }) {
   return (
     <Link
       href={`/explore?q=${encodeURIComponent(`#${trend.tag}`)}`}
-      className="block px-4 py-3 transition-colors hover:bg-bg-hover"
+      className="block px-4 py-2.5 transition-colors hover:bg-bg-hover"
     >
-      <p className="text-[13px] text-fg-muted">{rank ? `${rank} · Trending` : "Trending"}</p>
+      {/* The rail's "Trends for you" heading already says these are trending. */}
+      {rank && <p className="text-[13px] text-fg-muted">{rank} · Trending</p>}
       <p className="font-bold">#{trend.tag}</p>
       <p className="text-[13px] text-fg-muted">
         {compactNumber(trend.postCount)} {trend.postCount === 1 ? "post" : "posts"}

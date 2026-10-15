@@ -24,10 +24,9 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
   if (postIds.length) for (const image of all<{ post_id: string; url: string }>(`SELECT * FROM post_images WHERE post_id IN (${placeholders(postIds)}) ORDER BY position`, ...postIds)) {
     images.set(image.post_id, [...(images.get(image.post_id) || []), image.url]);
   }
-  type Counts = { post_id: string; count: number; mine: number };
-  const counts = (table: "likes" | "reposts" | "bookmarks") => new Map(all<Counts>(`SELECT post_id, COUNT(*) AS count, MAX(CASE WHEN user_id=? THEN 1 ELSE 0 END) AS mine FROM ${table} WHERE post_id IN (${placeholders(unique)}) GROUP BY post_id`, viewerId, ...unique).map(c => [c.post_id, c]));
-  const likes = counts("likes"), reposts = counts("reposts"), bookmarks = counts("bookmarks");
-  const replies = new Map(all<{ reply_to_id: string; count: number }>(`SELECT reply_to_id, COUNT(*) AS count FROM posts WHERE reply_to_id IN (${placeholders(unique)}) GROUP BY reply_to_id`, ...unique).map(c => [c.reply_to_id, c.count]));
+  const stats = new Map(all<{ post_id: string; likes: number; reposts: number; bookmarks: number; replies: number }>(`SELECT * FROM post_stats WHERE post_id IN (${placeholders(unique)})`, ...unique).map(r => [r.post_id, r]));
+  const mine = (table: "likes" | "reposts" | "bookmarks") => new Set(all<{ post_id: string }>(`SELECT post_id FROM ${table} WHERE user_id=? AND post_id IN (${placeholders(unique)})`, viewerId, ...unique).map(r => r.post_id));
+  const likes = mine("likes"), reposts = mine("reposts"), bookmarks = mine("bookmarks");
   return new Map(posts.map(p => {
     let quote: QuotedPost | null = null;
     if (p.quote_id) {
@@ -36,7 +35,7 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
         : { id: p.quote_id, author: { id: "", username: "", displayName: "Deleted post", avatarUrl: null, verified: false }, content: "", createdAt: new Date(0).toISOString(), imageUrls: [], deleted: true };
     }
     const parent = p.reply_to_id ? rowMap.get(p.reply_to_id) : null;
-    const post: Post = { id: p.id, author: authors.get(p.author_id)!, content: p.content, createdAt: new Date(p.created_at).toISOString(), imageUrls: images.get(p.id) || [], replyToId: p.reply_to_id, replyToUsername: parent ? authors.get(parent.author_id)?.username || null : null, quote, likeCount: likes.get(p.id)?.count || 0, repostCount: reposts.get(p.id)?.count || 0, bookmarkCount: bookmarks.get(p.id)?.count || 0, replyCount: replies.get(p.id) || 0, viewer: { liked: !!likes.get(p.id)?.mine, reposted: !!reposts.get(p.id)?.mine, bookmarked: !!bookmarks.get(p.id)?.mine } };
+    const post: Post = { id: p.id, author: authors.get(p.author_id)!, content: p.content, createdAt: new Date(p.created_at).toISOString(), imageUrls: images.get(p.id) || [], replyToId: p.reply_to_id, replyToUsername: parent ? authors.get(parent.author_id)?.username || null : null, quote, likeCount: stats.get(p.id)?.likes || 0, repostCount: stats.get(p.id)?.reposts || 0, bookmarkCount: stats.get(p.id)?.bookmarks || 0, replyCount: stats.get(p.id)?.replies || 0, viewer: { liked: likes.has(p.id), reposted: reposts.has(p.id), bookmarked: bookmarks.has(p.id) } };
     return [p.id, post];
   }));
 }
@@ -48,10 +47,10 @@ export function postThread(id: string, viewerId: string | null): PostThread | nu
   const ancestors = all<{ id: string; depth: number }>(`WITH RECURSIVE chain(id,reply_to_id,depth,path) AS (
     SELECT id,reply_to_id,0,',' || id || ',' FROM posts WHERE id=?
     UNION ALL SELECT p.id,p.reply_to_id,c.depth+1,c.path || p.id || ',' FROM posts p JOIN chain c ON p.id=c.reply_to_id
-    WHERE instr(c.path,',' || p.id || ',')=0 AND c.depth<1000
+    WHERE instr(c.path,',' || p.id || ',')=0 AND c.depth<100
   ) SELECT id,depth FROM chain WHERE depth>0 ORDER BY depth DESC`, id);
   const replies = all<{ id: string }>(`SELECT p.id FROM posts p WHERE reply_to_id=? ORDER BY (author_id=?) DESC,
-    (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) DESC, created_at ASC, id ASC`, id, target.author_id);
+    (SELECT likes FROM post_stats s WHERE s.post_id=p.id) DESC, created_at ASC, id ASC LIMIT 100`, id, target.author_id);
   const hydrated = hydratePosts([id, ...ancestors.map(p => p.id), ...replies.map(p => p.id)], viewerId);
   const visible = (rows: { id: string }[]) => rows.flatMap(p => hydrated.has(p.id) ? [hydrated.get(p.id)!] : []);
   return { post: hydrated.get(id)!, ancestors: visible(ancestors), replies: visible(replies) };
@@ -112,6 +111,6 @@ export function togglePostInteraction(viewerId: string, postId: string, kind: "l
       run(`INSERT INTO ${table} VALUES(?,?,?)`, viewerId, postId, Date.now());
       if (kind !== "bookmark") notify(post.author_id, viewerId, kind, postId);
     }
-    return { active, count: one<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table} WHERE post_id=?`, postId)!.count };
+    return { active, count: one<{ count: number }>(`SELECT ${table} AS count FROM post_stats WHERE post_id=?`, postId)!.count };
   });
 }

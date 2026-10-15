@@ -19,25 +19,25 @@ import { DatabaseSync } from "node:sqlite";
 process.env.ELYTRA_DB_PATH = ":memory:";
 const db = getDb();
 let checks = 0;
-function check(label: string, fn: () => void) { fn(); checks++; console.log(`PASS ${label}`); }
-check("seed: 8 users, 42 posts, threads, tags, and social activity", () => {
+async function check(label: string, fn: () => void | Promise<void>) { await fn(); checks++; console.log(`PASS ${label}`); }
+await check("seed: 8 users, 42 posts, threads, tags, and social activity", async () => {
   assert.equal(one<{ n: number }>("SELECT COUNT(*) AS n FROM users")!.n, 8);
   assert.equal(one<{ n: number }>("SELECT COUNT(*) AS n FROM posts")!.n, 42);
   assert(trends(5).length > 0);
   assert(postThread("seed_post_35", null)!.ancestors.length === 3);
-  for (const username of ["theo", "demo", "sarah", "marcus", "priya", "alex", "jules", "maya"]) assert(authenticate(username, "password123"));
+  for (const username of ["theo", "demo", "sarah", "marcus", "priya", "alex", "jules", "maya"]) assert(await authenticate(username, "password123"));
   const hashes = all<{ password_hash: string }>("SELECT password_hash FROM users");
   assert.equal(new Set(hashes.map(r => r.password_hash)).size, 8);
 });
-const alice = createUser("test_alice", "Alice Test", "securepass123");
-const bob = createUser("test_bob", "Bob Test", "securepass123");
-const carol = createUser("test_carol", "Carol Test", "securepass123");
-check("authentication, case-insensitive uniqueness, and hashed expiring sessions", () => {
-  assert.equal(authenticate("TEST_ALICE", "securepass123")?.id, alice.id);
-  assert.equal(authenticate("test_alice", "wrong password"), null);
-  assert.equal(authenticate("no_such_user", "wrong password"), null);
-  assert.throws(() => createUser("TEST_ALICE", "Another Alice", "securepass123"));
-  assert.throws(() => createUser("!", "No", "securepass123"));
+const alice = await createUser("test_alice", "Alice Test", "securepass123");
+const bob = await createUser("test_bob", "Bob Test", "securepass123");
+const carol = await createUser("test_carol", "Carol Test", "securepass123");
+await check("authentication, case-insensitive uniqueness, and hashed expiring sessions", async () => {
+  assert.equal((await authenticate("TEST_ALICE", "securepass123"))?.id, alice.id);
+  assert.equal(await authenticate("test_alice", "wrong password"), null);
+  assert.equal(await authenticate("no_such_user", "wrong password"), null);
+  await assert.rejects(() => createUser("TEST_ALICE", "Another Alice", "securepass123"));
+  await assert.rejects(() => createUser("!", "No", "securepass123"));
   const session = createSession(alice.id);
   assert.equal(session.token.length, 64);
   assert.equal(viewerForToken(session.token)?.id, alice.id);
@@ -49,7 +49,7 @@ check("authentication, case-insensitive uniqueness, and hashed expiring sessions
   deleteSession(next.token);
   assert.equal(viewerForToken(next.token), null);
 });
-check("follow flags, lists, suggestions, notifications, and undo", () => {
+await check("follow flags, lists, suggestions, notifications, and undo", async () => {
   assert.equal(toggleFollowUser(alice.id, bob.id), true);
   assert.equal(profileByUsername("TEST_BOB", alice.id)?.isFollowing, true);
   assert.equal(profileByUsername("test_alice", bob.id)?.followsYou, true);
@@ -67,7 +67,7 @@ const root = insertPost(bob.id, { content: "  Hello #BackendTest @test_carol  " 
 const reply = insertPost(alice.id, { content: "Reply @test_bob #BackendTest", replyToId: root });
 const grandchild = insertPost(bob.id, { content: "A reply to the reply", replyToId: reply });
 const quote = insertPost(carol.id, { content: "", quoteId: root });
-check("posts, mentions, quotes, and deduplicated reply notifications", () => {
+await check("posts, mentions, quotes, and deduplicated reply notifications", async () => {
   assert.equal(postById(root, alice.id)?.content, "Hello #BackendTest @test_carol");
   assert.equal(postById(reply, alice.id)?.replyToUsername, "test_bob");
   assert.equal(postById(quote, null)?.quote?.id, root);
@@ -80,7 +80,7 @@ check("posts, mentions, quotes, and deduplicated reply notifications", () => {
   assert.throws(() => insertPost(alice.id, { content: "x".repeat(281) }));
   assert.throws(() => insertPost(alice.id, { content: "x", quoteId: "missing" }));
 });
-check("likes, reposts, bookmarks, ownership, and signed-out flags", () => {
+await check("likes, reposts, bookmarks, ownership, and signed-out flags", async () => {
   assert.deepEqual(togglePostInteraction(alice.id, root, "like"), { active: true, count: 1 });
   assert.equal(postById(root, alice.id)?.viewer.liked, true);
   assert.equal(postById(root, null)?.viewer.liked, false);
@@ -96,11 +96,11 @@ check("likes, reposts, bookmarks, ownership, and signed-out flags", () => {
 const ownReply = insertPost(bob.id, { content: "Author's own reply", replyToId: root });
 const popularReply = insertPost(carol.id, { content: "A popular reply", replyToId: root });
 togglePostInteraction(alice.id, popularReply, "like");
-check("thread reply ordering: author, likes, oldest", () => {
+await check("thread reply ordering: author, likes, oldest", async () => {
   assert.deepEqual(postThread(root, null)!.replies.map(p => p.id), [ownReply, popularReply, reply]);
 });
 for (let i = 0; i < 47; i++) insertPost(bob.id, { content: `Pagination item ${i} #PaginationTest` });
-check("stable pagination through 3 pages despite new posts and popularity changes", () => {
+await check("stable pagination through 3 pages despite new posts and popularity changes", async () => {
   const source: TimelineSource = { kind: "search", q: "#PaginationTest", tab: "top" };
   let page = timeline(source, null, alice.id);
   assert.equal(page.items.length, 20);
@@ -126,7 +126,7 @@ check("stable pagination through 3 pages despite new posts and popularity change
   assert(!validTimelineSource({ kind: "search", q: 4, tab: "top" }));
   assert(!validTimelineSource({ kind: "user", username: "demo", tab: ["posts"] }));
 });
-check("every timeline source and viewer-specific event selection", () => {
+await check("every timeline source and viewer-specific event selection", async () => {
   const following = timeline({ kind: "home", tab: "following" }, null, alice.id);
   assert(following.items.length > 0);
   assert(following.items.every(i => (i.repostedBy?.id ?? i.post.author.id) === bob.id));
@@ -147,10 +147,10 @@ check("every timeline source and viewer-specific event selection", () => {
   assert.equal(timeline({ kind: "home", tab: "following" }, following.nextCursor, bob.id).items.length, 0);
   assert.equal(timeline({ kind: "search", q: "hello", tab: "top" }, following.nextCursor, alice.id).items.length, 0);
 });
-check("Following selects followed accounts, preserves their reposts, and rechecks follows during pagination", () => {
-  const viewer = createUser("follow_viewer", "Following Viewer", "password123");
-  const friend = createUser("follow_friend", "Following Friend", "password123");
-  const stranger = createUser("follow_stranger", "Following Stranger", "password123");
+await check("Following selects followed accounts, preserves their reposts, and rechecks follows during pagination", async () => {
+  const viewer = await createUser("follow_viewer", "Following Viewer", "password123");
+  const friend = await createUser("follow_friend", "Following Friend", "password123");
+  const stranger = await createUser("follow_stranger", "Following Stranger", "password123");
   const source: TimelineSource = { kind: "home", tab: "following" };
   const own = insertPost(viewer.id, { content: "Own post" });
   const outside = insertPost(stranger.id, { content: "Outside post" });
@@ -170,7 +170,7 @@ check("Following selects followed accounts, preserves their reposts, and recheck
   assert.deepEqual(timeline(source, page.nextCursor, viewer.id).items, []);
   assert.deepEqual(timeline(source, null, viewer.id).items, []);
 });
-check("search top uses recent matches and falls back to all time", () => {
+await check("search top uses recent matches and falls back to all time", async () => {
   const old = insertPost(bob.id, { content: "#OldOnlyExample #RecentWindowExample" });
   run("UPDATE posts SET created_at=? WHERE id=?", Date.now() - 40 * 86400000, old);
   const recent = insertPost(bob.id, { content: "#RecentWindowExample" });
@@ -178,7 +178,7 @@ check("search top uses recent matches and falls back to all time", () => {
   assert.deepEqual(timeline({ kind: "search", q: "#RecentWindowExample", tab: "top" }, null, null).items.map(i => i.post.id), [recent]);
   assert.deepEqual(timeline({ kind: "search", q: "#OldOnlyExample", tab: "top" }, null, null).items.map(i => i.post.id), [old]);
 });
-check("profile edits, read markers, and mentions-only filters", () => {
+await check("profile edits, read markers, and mentions-only filters", async () => {
   editProfile(alice.id, { displayName: "Alice Updated", bio: "New bio", location: "Regina", website: "https://example.com" });
   assert.equal(profileByUsername("test_alice", alice.id)?.displayName, "Alice Updated");
   assert(unreadCount(bob.id) > 0);
@@ -204,7 +204,7 @@ try {
   console.log("PASS image magic bytes, MIME/size validation, media timelines, and file cleanup"); checks++;
 } finally { await removeImages([imageUrl]); }
 await assert.rejects(access(join(uploadDirectory(), imageUrl.split("/").pop()!)));
-check("deletion cascades activity and preserves replies and quote tombstones", () => {
+await check("deletion cascades activity and preserves replies and quote tombstones", async () => {
   removePost(bob.id, root);
   assert.equal(postById(root, null), null);
   assert.equal(postById(reply, null)?.replyToId, root);
@@ -216,14 +216,14 @@ check("deletion cascades activity and preserves replies and quote tombstones", (
   assert.equal(userByUsername("test_bob")?.id, bob.id);
 });
 // Independent recommendation fixture: controlled ages, equal popularity, and two network pools.
-const rankViewer = createUser("rank_viewer", "Rank Viewer", "password123");
-const friend = createUser("rank_friend", "Rank Friend", "password123");
-const secondFriend = createUser("rank_second", "Second Friend", "password123");
-const close = createUser("rank_close", "Close Author", "password123");
-const stranger = createUser("rank_stranger", "Stranger", "password123");
-const isolated = createUser("rank_isolated", "Isolated", "password123");
-const topicAuthor = createUser("rank_topic", "Topic Author", "password123");
-const newViewer = createUser("rank_new", "New Viewer", "password123");
+const rankViewer = await createUser("rank_viewer", "Rank Viewer", "password123");
+const friend = await createUser("rank_friend", "Rank Friend", "password123");
+const secondFriend = await createUser("rank_second", "Second Friend", "password123");
+const close = await createUser("rank_close", "Close Author", "password123");
+const stranger = await createUser("rank_stranger", "Stranger", "password123");
+const isolated = await createUser("rank_isolated", "Isolated", "password123");
+const topicAuthor = await createUser("rank_topic", "Topic Author", "password123");
+const newViewer = await createUser("rank_new", "New Viewer", "password123");
 const rankNow = Date.now();
 const forYou: TimelineSource = { kind: "home", tab: "for-you" };
 const makeRankPost = (author: string, content: string, age = 0, parent?: string) => {
@@ -262,7 +262,7 @@ const nested = makeRankPost(friend.id, "Nested reply", 0, sibling);
 for (const id of [conversationRoot, sibling]) togglePostInteraction(friend.id, id, "like");
 togglePostInteraction(friend.id, closeIds[0], "repost");
 const ranked = rankForYou(rankViewer.id, rankNow);
-check("For You: relationship ranking, social proof, strong topic similarity, and own-post exclusion", () => {
+await check("For You: relationship ranking, social proof, strong topic similarity, and own-post exclusion", async () => {
   const a = ranked.find(p => p.id === closeIds[1])!, b = ranked.find(p => p.id === strangerIds[1])!;
   assert(a && b);
   assert(a.score > b.score);
@@ -272,7 +272,7 @@ check("For You: relationship ranking, social proof, strong topic similarity, and
   assert(!ranked.some(p => p.id === noProof || p.id === own || p.id === weakSimilar));
   assert(ranked.some(p => p.id === similar && p.similarity >= 0.6));
 });
-check("For You: roughly 50/50 mixing, author diversity, canonical reposts, and conversation deduplication", () => {
+await check("For You: roughly 50/50 mixing, author diversity, canonical reposts, and conversation deduplication", async () => {
   const first = ranked.slice(0, 20);
   assert.equal(first.filter(p => p.inNetwork).length, 10);
   for (let i = 2; i < ranked.length; i++) assert(!(ranked[i].author_id === ranked[i - 1].author_id && ranked[i].author_id === ranked[i - 2].author_id));
@@ -282,7 +282,7 @@ check("For You: roughly 50/50 mixing, author diversity, canonical reposts, and c
   assert.equal(new Set(ranked.map(p => p.id)).size, ranked.length);
   assert.equal(new Set(ranked.map(p => p.conversation)).size, ranked.length);
 });
-check("For You: frozen ranked pagination has no gaps/duplicates, cross-viewer/source rejection, and expiry", () => {
+await check("For You: frozen ranked pagination has no gaps/duplicates, cross-viewer/source rejection, and expiry", async () => {
   let page = timeline(forYou, null, rankViewer.id);
   assert.equal(page.items.length, 20); assert(page.nextCursor);
   const cursor = page.nextCursor;
@@ -309,7 +309,7 @@ check("For You: frozen ranked pagination has no gaps/duplicates, cross-viewer/so
   run("UPDATE timeline_snapshots SET created_at=0 WHERE id=?", snapshotId);
   assert.equal(timeline(forYou, cursor, rankViewer.id).items.length, 0);
 });
-check("For You: signed-out and brand-new viewers receive the same popular cold-start fallback", () => {
+await check("For You: signed-out and brand-new viewers receive the same popular cold-start fallback", async () => {
   const signedOut = rankForYou(null, rankNow), fresh = rankForYou(newViewer.id, rankNow);
   assert.deepEqual(signedOut.map(p => p.id), fresh.map(p => p.id));
   assert(signedOut.some(p => p.id === noProof));
@@ -317,7 +317,7 @@ check("For You: signed-out and brand-new viewers receive the same popular cold-s
   assert(signedOut.find(p => p.id === noProof)!.score > signedOut.find(p => p.id === own)!.score);
   assert(timeline(forYou, null, null).items.length === 20);
 });
-check("For You: impressions are validated/idempotent, filter for 24h, fatigue later, and do not affect Following", () => {
+await check("For You: impressions are validated/idempotent, filter for 24h, fatigue later, and do not affect Following", async () => {
   assert.throws(() => saveImpressions(rankViewer.id, ["../invalid"]));
   assert.throws(() => saveImpressions(rankViewer.id, Array(101).fill(closeIds[0])));
   const id = closeIds[2];
@@ -335,8 +335,8 @@ check("For You: impressions are validated/idempotent, filter for 24h, fatigue la
   saveImpressions(rankViewer.id, [networkId]);
   assert(timeline({ kind: "home", tab: "following" }, null, rankViewer.id).items.some(p => p.post.id === networkId));
 });
-check("For You: exhausted unseen recommendations fall back to seen posts while preserving dismissals", () => {
-  const viewer = createUser("rank_exhausted", "Exhausted Viewer", "password123");
+await check("For You: exhausted unseen recommendations fall back to seen posts while preserving dismissals", async () => {
+  const viewer = await createUser("rank_exhausted", "Exhausted Viewer", "password123");
   toggleFollowUser(viewer.id, friend.id);
   const initial = rankForYou(viewer.id, rankNow);
   assert(initial.length > 0);
@@ -351,7 +351,7 @@ check("For You: exhausted unseen recommendations fall back to seen posts while p
   const fresh = makeRankPost(friend.id, "Fresh post after exhausting recommendations");
   assert.deepEqual(rankForYou(viewer.id, rankNow + 1000).map(p => p.id), [fresh]);
 });
-check("For You: explicit negative feedback filters a post, penalizes the author, decays, and skips active snapshots", () => {
+await check("For You: explicit negative feedback filters a post, penalizes the author, decays, and skips active snapshots", async () => {
   const before = rankForYou(rankViewer.id, rankNow);
   const peer = closeIds[4], dismissed = closeIds[3];
   let page = timeline(forYou, null, rankViewer.id);
@@ -380,7 +380,7 @@ check("For You: explicit negative feedback filters a post, penalizes the author,
   removePost(friend.id, removed);
   for (const table of ["impressions", "negative_feedback"]) assert.equal(one<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table} WHERE post_id=?`, removed)!.n, 0);
 });
-check("For You: bounded ranking latency with 5,000 additional recent posts and batched graph signals", () => {
+await check("For You: bounded ranking latency with 5,000 additional recent posts and batched graph signals", async () => {
   db.exec("BEGIN");
   try {
     const post = db.prepare("INSERT INTO posts VALUES(?,?,?,?,?,?)");
@@ -420,7 +420,7 @@ try {
   const legacy = new DatabaseSync(migrationPath);
   legacy.exec("DROP TABLE impressions; DROP TABLE negative_feedback; DROP INDEX posts_quote;");
   const countBefore = legacy.prepare("SELECT COUNT(*) AS n FROM posts").get()!.n;
-  check("additive migrations preserve existing data, migrate HMR-cached connections, and are idempotent on reconnect", () => {
+  await check("additive migrations preserve existing data, migrate HMR-cached connections, and are idempotent on reconnect", async () => {
     const cache = globalThis as typeof globalThis & { elytraDb?: DatabaseSync };
     cache.elytraDb = legacy;
     process.env.ELYTRA_DB_PATH = migrationPath;
@@ -429,8 +429,8 @@ try {
     assert.equal(migrated.prepare("SELECT COUNT(*) AS n FROM posts").get()!.n, countBefore);
     for (const table of ["impressions", "negative_feedback"]) assert(migrated.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table));
     for (const index of ["posts_quote", "impressions_post", "impressions_viewer_time", "negative_feedback_author", "negative_feedback_post"]) assert(migrated.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(index));
-    assert(authenticate("demo", "password123"));
-    assert(authenticate("theo", "password123"));
+    assert(await authenticate("demo", "password123"));
+    assert(await authenticate("theo", "password123"));
     migrated.close(); cache.elytraDb = undefined;
     const reconnected = getDb();
     assert.equal(reconnected.prepare("SELECT COUNT(*) AS n FROM posts").get()!.n, countBefore);

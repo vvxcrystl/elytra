@@ -2,10 +2,9 @@ import "server-only";
 import type { Viewer, Page } from "../../lib/types";
 import { AppError } from "../errors";
 import { viewerForToken } from "../data/core";
-import { one, run } from "../data/core";
-import { tokenHash } from "../security";
-import { transaction } from "../db";
+import { backendConfig } from "../config";
 import type { PageOptions } from "../data/pagination";
+export { rateLimit, clientKey } from "../rate-limit";
 
 export type Field = { type: "string" | "boolean" | "array" | "object"; required?: boolean; minLength?: number; maxLength?: number; pattern?: string; enum?: string[]; nullable?: boolean; maxItems?: number; items?: Field; fields?: Fields };
 export type Fields = Record<string, Field>;
@@ -76,18 +75,41 @@ export async function boundedBytes(request: Request, max: number): Promise<Uint8
   if (length && Number(length) > max) throw new AppError(413, "payload_too_large", "Request body is too large");
   const reader = request.body?.getReader();
   if (!reader) return new Uint8Array();
-  const chunks: Uint8Array[] = []; let size = 0;
-  try {
+  if (request.signal.aborted) {
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+    throw new AppError(408, "request_aborted", "Request was aborted");
+  }
+  let buffer = new Uint8Array(Math.min(max, 8192)), size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    const fail = (error: AppError) => { reject(error); void reader.cancel().catch(() => {}); };
+    timer = setTimeout(() => fail(new AppError(408, "request_timeout", "Request body timed out")), backendConfig().bodyTimeoutMs);
+    abort = () => fail(new AppError(408, "request_aborted", "Request was aborted"));
+    request.signal.addEventListener("abort", abort, { once: true });
+  });
+  // Race the entire read once. Racing each chunk would retain a promise reaction
+  // per chunk until the deadline, making one-byte streams disproportionately costly.
+  const reading = (async () => {
     while (true) {
-      const { value, done } = await reader.read(); if (done) break;
-      size += value.byteLength;
-      if (size > max) { await reader.cancel(); throw new AppError(413, "payload_too_large", "Request body is too large"); }
-      chunks.push(value);
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (size + value.byteLength > max) { void reader.cancel().catch(() => {}); throw new AppError(413, "payload_too_large", "Request body is too large"); }
+      if (size + value.byteLength > buffer.length) {
+        const larger = new Uint8Array(Math.min(max, Math.max(size + value.byteLength, buffer.length * 2)));
+        larger.set(buffer); buffer = larger;
+      }
+      buffer.set(value, size); size += value.byteLength;
     }
-  } finally { reader.releaseLock(); }
-  const result = new Uint8Array(size); let offset = 0;
-  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
-  return result;
+    return buffer.subarray(0, size);
+  })();
+  try { return await Promise.race([reading, deadline]); }
+  finally {
+    clearTimeout(timer);
+    if (abort) request.signal.removeEventListener("abort", abort);
+    reader.releaseLock();
+  }
 }
 export async function jsonBody(request: Request, fields: Fields, maxBytes = 64 * 1024): Promise<Input> {
   if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") throw new AppError(415, "unsupported_media_type", "Use Content-Type: application/json");
@@ -118,14 +140,4 @@ export function checkOrigin(request: Request, bearer: boolean): void {
 }
 export function sessionCookie(token: string, maxAge: number, expires?: Date): string {
   return `elytra_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${expires ? `; Expires=${expires.toUTCString()}` : ""}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
-}
-export function rateLimit(key: string, limit: number, windowMs: number): { remaining: number; reset: number } {
-  return transaction(() => {
-    const now = Date.now();
-    run("DELETE FROM api_rate_limits WHERE reset_at<=?", now);
-    run(`INSERT INTO api_rate_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=api_rate_limits.count+1`, tokenHash(key), now + windowMs);
-    const row = one<{ count: number; reset_at: number }>("SELECT count,reset_at FROM api_rate_limits WHERE key=?", tokenHash(key))!;
-    if (row.count > limit) throw new AppError(429, "rate_limited", "Too many requests. Try again later.", { retryAfter: Math.max(1, Math.ceil((row.reset_at - now) / 1000)) });
-    return { remaining: limit - row.count, reset: Math.ceil(row.reset_at / 1000) };
-  });
 }

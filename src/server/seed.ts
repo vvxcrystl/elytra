@@ -1,6 +1,6 @@
 import "server-only";
 import type { DatabaseSync } from "node:sqlite";
-import { hashPassword } from "./security";
+import { hashPasswordSync } from "./security";
 
 export function seedDatabase(db: DatabaseSync): void {
   db.exec("BEGIN IMMEDIATE");
@@ -19,7 +19,7 @@ export function seedDatabase(db: DatabaseSync): void {
       ["maya", "Maya Johnson", "Frontend engineer. CSS is my creative outlet."],
     ];
     const user = db.prepare("INSERT INTO users(id,username,username_lower,display_name,password_hash,bio,location,created_at) VALUES(?,?,?,?,?,?,?,?)");
-    people.forEach(([name, display, bio], i) => user.run(`seed_${name}`, name, name, display, hashPassword("password123"), bio, ["San Francisco", "", "New York", "Austin", "London", "Portland", "Toronto", "Brooklyn"][i], now - 86400000 * (120 + i)));
+    people.forEach(([name, display, bio], i) => user.run(`seed_${name}`, name, name, display, hashPasswordSync("password123"), bio, ["San Francisco", "", "New York", "Austin", "London", "Portland", "Toronto", "Brooklyn"][i], now - 86400000 * (120 + i)));
     const follow = db.prepare("INSERT INTO follows VALUES(?,?,?)");
     people.forEach(([name], i) => people.forEach(([other], j) => { if (i !== j && (i + j) % 3 !== 0) follow.run(`seed_${name}`, `seed_${other}`, now - 86400000); }));
     const messages = [

@@ -1,11 +1,11 @@
 import "server-only";
 import type { Conversation, Message } from "../../lib/api-types";
 import type { Page } from "../../lib/types";
-import { all, one, run, summary, type UserRow } from "./core";
+import { all, one, run, summary, placeholders, type UserRow } from "./core";
 import { transaction } from "../db";
 import { newId } from "../security";
 import { AppError } from "../errors";
-import { assertCanInteract, relationship } from "./safety";
+import { assertCanInteract } from "./safety";
 import { decodeCursor, encodeCursor, type PageOptions } from "./pagination";
 import type { EncryptedEnvelope } from "../../lib/e2ee-contract";
 import { validateEncryptedEnvelope } from "./encryption";
@@ -18,18 +18,40 @@ function member(viewerId: string, id: string): ConversationRow {
   if (!row) throw new AppError(404, "not_found", "Conversation not found");
   return row;
 }
-function message(row: MessageRow): Message {
-  const chat = one<ConversationRow>("SELECT * FROM conversations WHERE id=?", row.conversation_id)!;
-  return { id: row.id, conversationId: row.conversation_id, sender: summary(one<UserRow>("SELECT * FROM users WHERE id=?", row.sender_id)!), recipientId: chat.user_a === row.sender_id ? chat.user_b : chat.user_a, encryption: row.envelope ? JSON.parse(row.envelope) as EncryptedEnvelope : null, legacyRemoved: !!row.legacy_removed, createdAt: new Date(row.created_at).toISOString() };
+function hydrateMessages(rows: MessageRow[], knownChats?: ConversationRow[]): Message[] {
+  if (!rows.length) return [];
+  const chatIds = [...new Set(rows.map(r => r.conversation_id))];
+  const chats = new Map((knownChats ?? all<ConversationRow>(`SELECT * FROM conversations WHERE id IN (${placeholders(chatIds)})`, ...chatIds)).map(r => [r.id, r]));
+  const senderIds = [...new Set(rows.map(r => r.sender_id))];
+  const senders = new Map(all<UserRow>(`SELECT * FROM users WHERE id IN (${placeholders(senderIds)})`, ...senderIds).map(r => [r.id, summary(r)]));
+  return rows.map(row => {
+    const chat = chats.get(row.conversation_id)!;
+    return { id: row.id, conversationId: row.conversation_id, sender: senders.get(row.sender_id)!, recipientId: chat.user_a === row.sender_id ? chat.user_b : chat.user_a, encryption: row.envelope ? JSON.parse(row.envelope) as EncryptedEnvelope : null, legacyRemoved: !!row.legacy_removed, createdAt: new Date(row.created_at).toISOString() };
+  });
 }
-function conversation(row: ConversationRow, viewerId: string): Conversation {
-  const targetId = row.user_a === viewerId ? row.user_b : row.user_a;
-  const flags = relationship(viewerId, targetId);
-  const last = one<MessageRow>("SELECT * FROM messages WHERE conversation_id=? ORDER BY seq DESC LIMIT 1", row.id);
-  const unreadCount = one<{ n: number }>(`SELECT COUNT(*) AS n FROM messages WHERE conversation_id=? AND sender_id<>?
-    AND seq>COALESCE((SELECT last_read_seq FROM conversation_reads WHERE conversation_id=? AND user_id=?),0)`, row.id, viewerId, row.id, viewerId)!.n;
-  return { id: row.id, participant: summary(one<UserRow>("SELECT * FROM users WHERE id=?", targetId)!), lastMessage: last ? message(last) : null, unreadCount, blocked: flags.isBlocked || flags.blockedBy, muted: flags.isMuted, updatedAt: new Date(row.updated_at).toISOString() };
+function message(row: MessageRow): Message { return hydrateMessages([row])[0]; }
+function hydrateConversations(rows: ConversationRow[], viewerId: string): Conversation[] {
+  if (!rows.length) return [];
+  const ids = rows.map(r => r.id), targets = rows.map(r => r.user_a === viewerId ? r.user_b : r.user_a);
+  const people = new Map(all<UserRow & { blocked: number; blocked_by: number; muted: number }>(`SELECT u.*,
+    EXISTS(SELECT 1 FROM blocks b WHERE b.user_id=? AND b.target_id=u.id) blocked,
+    EXISTS(SELECT 1 FROM blocks b WHERE b.user_id=u.id AND b.target_id=?) blocked_by,
+    EXISTS(SELECT 1 FROM mutes m WHERE m.user_id=? AND m.target_id=u.id) muted
+    FROM users u WHERE u.id IN (${placeholders(targets)})`, viewerId, viewerId, viewerId, ...targets).map(r => [r.id, r]));
+  const lastRows = all<MessageRow>(`SELECT m.* FROM messages m WHERE m.seq IN (
+    SELECT (SELECT seq FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1)
+    FROM conversations c WHERE c.id IN (${placeholders(ids)}))`, ...ids);
+  const last = new Map(hydrateMessages(lastRows, rows).map(m => [m.conversationId, m]));
+  const unread = new Map(all<{ conversation_id: string; n: number }>(`SELECT m.conversation_id,COUNT(*) n FROM messages m
+    LEFT JOIN conversation_reads r ON r.conversation_id=m.conversation_id AND r.user_id=?
+    WHERE m.conversation_id IN (${placeholders(ids)}) AND m.sender_id<>? AND m.seq>COALESCE(r.last_read_seq,0)
+    GROUP BY m.conversation_id`, viewerId, ...ids, viewerId).map(r => [r.conversation_id, r.n]));
+  return rows.map(row => {
+    const person = people.get(row.user_a === viewerId ? row.user_b : row.user_a)!;
+    return { id: row.id, participant: summary(person), lastMessage: last.get(row.id) ?? null, unreadCount: unread.get(row.id) ?? 0, blocked: !!(person.blocked || person.blocked_by), muted: !!person.muted, updatedAt: new Date(row.updated_at).toISOString() };
+  });
 }
+function conversation(row: ConversationRow, viewerId: string): Conversation { return hydrateConversations([row], viewerId)[0]; }
 export function conversationById(viewerId: string, id: string): Conversation { return conversation(member(viewerId, id), viewerId); }
 export function createConversation(viewerId: string, recipientId: string): { conversation: Conversation; created: boolean } {
   if (viewerId === recipientId) throw new AppError(400, "invalid_target", "Choose another person to message");
@@ -50,14 +72,14 @@ export function conversationsFor(viewerId: string, options: PageOptions): Page<C
   const rows = all<ConversationRow>(`SELECT * FROM conversations WHERE (user_a=? OR user_b=?)
     ${key ? "AND (updated_at<? OR (updated_at=? AND id<?))" : ""} ORDER BY updated_at DESC,id DESC LIMIT ?`, viewerId, viewerId, ...(key ? [key[0], key[0], key[1]] : []), options.limit + 1);
   const selected = rows.slice(0, options.limit), last = selected.at(-1);
-  return { items: selected.map(r => conversation(r, viewerId)), nextCursor: rows.length > options.limit && last ? encodeCursor(scope, [last.updated_at, last.id]) : null };
+  return { items: hydrateConversations(selected, viewerId), nextCursor: rows.length > options.limit && last ? encodeCursor(scope, [last.updated_at, last.id]) : null };
 }
 export function messagesFor(viewerId: string, id: string, options: PageOptions): Page<Message> {
-  member(viewerId, id);
+  const chat = member(viewerId, id);
   const scope = `messages:${viewerId}:${id}`, key = decodeCursor(options.cursor, scope, ["number"]);
   const rows = all<MessageRow>(`SELECT * FROM messages WHERE conversation_id=? ${key ? "AND seq<?" : ""} ORDER BY seq DESC LIMIT ?`, id, ...(key ? [key[0]] : []), options.limit + 1);
   const selected = rows.slice(0, options.limit), last = selected.at(-1);
-  return { items: selected.map(message), nextCursor: rows.length > options.limit && last ? encodeCursor(scope, [last.seq]) : null };
+  return { items: hydrateMessages(selected, [chat]), nextCursor: rows.length > options.limit && last ? encodeCursor(scope, [last.seq]) : null };
 }
 export function sendMessage(viewerId: string, id: string, encryption: EncryptedEnvelope): Message {
   return transaction(() => {

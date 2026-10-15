@@ -4,7 +4,9 @@ import { all, one, run, summary, userByUsername, placeholders } from "./core";
 import type { UserRow } from "./core";
 import { hydratePosts } from "./posts";
 import { newId } from "../security";
-import { transaction } from "../db";
+import { backendConfig } from "../config";
+import { maintainDatabase } from "../db-maintenance";
+import { getDb, transaction } from "../db";
 import { recommendedEntries } from "./recommendations";
 import { blockedIds, mutedIds } from "./safety";
 import { AppError } from "../errors";
@@ -30,7 +32,7 @@ function sourceKey(source: TimelineSource): string {
   }
 }
 function candidates(source: TimelineSource, viewerId: string | null): Entry[] {
-  if (source.kind === "home" && source.tab === "for-you") return recommendedEntries(viewerId);
+  if (source.kind === "home" && source.tab === "for-you") return recommendedEntries(viewerId).slice(0, backendConfig().snapshotEntries);
   type Candidate = Entry & { time: number; score: number };
   let sql = "", args: (string | number | null)[] = [];
   const postSelect = "SELECT 'post:' || p.id AS key,p.id AS postId,NULL AS reposterId,p.created_at AS time,0 AS score FROM posts p";
@@ -71,19 +73,19 @@ function candidates(source: TimelineSource, viewerId: string | null): Entry[] {
       if (one(`SELECT 1 FROM posts p WHERE ${filter} AND p.created_at>=? LIMIT 1`, ...args, since)) { filter += " AND p.created_at>=?"; args.push(since); }
     }
     sql = `SELECT 'post:' || p.id AS key,p.id AS postId,NULL AS reposterId,p.created_at AS time,
-      ${source.tab === "top" ? "(SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id)+2*(SELECT COUNT(*) FROM reposts r WHERE r.post_id=p.id)+(SELECT COUNT(*) FROM posts child WHERE child.reply_to_id=p.id)" : "0"} AS score FROM posts p WHERE ${filter}`;
+      ${source.tab === "top" ? "(SELECT likes+2*reposts+replies FROM post_stats s WHERE s.post_id=p.id)" : "0"} AS score FROM posts p WHERE ${filter}`;
   }
-  return all<Candidate>(`SELECT * FROM (${sql}) ORDER BY score DESC,time DESC,key DESC`, ...args).map(({ key, postId, reposterId }) => ({ key, postId, reposterId }));
+  return all<Candidate>(`SELECT * FROM (${sql}) ORDER BY ${source.kind === "search" && source.tab === "top" ? "score DESC," : ""}time DESC,key DESC LIMIT ?`, ...args, backendConfig().snapshotEntries).map(({ key, postId, reposterId }) => ({ key, postId, reposterId }));
 }
-/** A 24-hour snapshot freezes event order, including search popularity, across load-more calls. */
+/** A snapshot (up to 24 hours, subject to the per-viewer retention budget) freezes event order, including search popularity, across load-more calls. */
 export function timeline(source: TimelineSource, cursor: string | null | undefined, viewerId: string | null, options: { limit?: number; strictCursor?: boolean } = {}): Page<FeedItem> {
   if (!validTimelineSource(source)) return empty();
   const limit = Math.max(1, Math.min(100, options.limit ?? 20));
   const badCursor = () => { if (options.strictCursor) throw new AppError(400, "invalid_cursor", "Cursor is invalid, expired, or belongs to another feed or account"); return empty(); };
-  return transaction(() => {
+  if (!cursor) maintainDatabase(getDb());
+  {
     const sourceId = sourceKey(source);
     let entries: Entry[], snapshotId: string, offset = 0;
-    run("DELETE FROM timeline_snapshots WHERE created_at<?", Date.now() - SNAPSHOT_AGE);
     if (cursor) {
       if (typeof cursor !== "string" || cursor.length > 500) return badCursor();
       try {
@@ -91,15 +93,25 @@ export function timeline(source: TimelineSource, cursor: string | null | undefin
         if (!Array.isArray(decoded) || decoded.length !== 2 || typeof decoded[0] !== "string" || !Number.isSafeInteger(decoded[1]) || decoded[1] < 0) return badCursor();
         [snapshotId, offset] = decoded as [string, number];
       } catch { return badCursor(); }
-      const snapshot = one<{ entries: string }>("SELECT entries FROM timeline_snapshots WHERE id=? AND viewer_id IS ? AND source=?", snapshotId, viewerId, sourceId);
+      const snapshot = one<{ entries: string }>("SELECT entries FROM timeline_snapshots WHERE id=? AND viewer_id IS ? AND source=? AND created_at>?", snapshotId, viewerId, sourceId, Date.now() - SNAPSHOT_AGE);
       if (!snapshot) return badCursor();
       entries = JSON.parse(snapshot.entries) as Entry[];
       if (offset > entries.length) return badCursor();
     } else {
       entries = candidates(source, viewerId);
       if (!entries.length) return empty();
-      snapshotId = newId();
-      run("INSERT INTO timeline_snapshots VALUES(?,?,?,?,?)", snapshotId, viewerId, sourceId, JSON.stringify(entries), Date.now());
+      const encoded = JSON.stringify(entries);
+      const previous = one<{ id: string; entries: string }>("SELECT id,entries FROM timeline_snapshots WHERE viewer_id IS ? AND source=? AND created_at>? ORDER BY created_at DESC LIMIT 1", viewerId, sourceId, Date.now() - SNAPSHOT_AGE);
+      if (previous?.entries === encoded) snapshotId = previous.id;
+      else {
+        snapshotId = newId();
+        transaction(() => {
+          run("INSERT INTO timeline_snapshots VALUES(?,?,?,?,?)", snapshotId, viewerId, sourceId, encoded, Date.now());
+          // Bound retained storage even when a client opens fresh feeds repeatedly.
+          run(`DELETE FROM timeline_snapshots WHERE id IN (SELECT id FROM timeline_snapshots
+            WHERE viewer_id IS ? AND id<>? ORDER BY created_at DESC,id DESC LIMIT 500 OFFSET ?)`, viewerId, snapshotId, backendConfig().snapshotsPerViewer - 1);
+        });
+      }
     }
     // Deleted posts or undone reposts/likes/bookmarks are skipped without shifting the snapshot positions.
     const selected: Entry[] = [];
@@ -133,5 +145,5 @@ export function timeline(source: TimelineSource, cursor: string | null | undefin
     const reposterIds = [...new Set(pageEntries.flatMap(e => e.reposterId ? [e.reposterId] : []))];
     const reposters = new Map(reposterIds.length ? all<UserRow>(`SELECT * FROM users WHERE id IN (${placeholders(reposterIds)})`, ...reposterIds).map(u => [u.id, summary(u)]) : []);
     return { items: pageEntries.map(e => ({ key: e.key, post: posts.get(e.postId)!, repostedBy: e.reposterId ? reposters.get(e.reposterId) || null : null })), nextCursor: hasMore ? Buffer.from(JSON.stringify([snapshotId, position])).toString("base64url") : null };
-  });
+  }
 }

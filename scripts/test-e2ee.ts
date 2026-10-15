@@ -17,7 +17,7 @@ let checks = 0;
 async function check(label: string, fn: () => void | Promise<void>) { await fn(); checks++; console.log(`PASS ${label}`); }
 function changed(value: string): string { const bytes = fromBase64(value); bytes[0] ^= 1; return toBase64(bytes); }
 try {
-  const alice = createUser("crypto_alice", "Alice", "password123"), bob = createUser("crypto_bob", "Bob", "password123"), eve = createUser("crypto_eve", "Eve", "password123");
+  const alice = await createUser("crypto_alice", "Alice", "password123"), bob = await createUser("crypto_bob", "Bob", "password123"), eve = await createUser("crypto_eve", "Eve", "password123");
   const [a, b, e] = await Promise.all([generateIdentity(alice.id), generateIdentity(bob.id), generateIdentity(eve.id)]);
   registerMessagingIdentity(alice.id, a.registration); registerMessagingIdentity(bob.id, b.registration); registerMessagingIdentity(eve.id, e.registration);
   const conversation = createConversation(alice.id, bob.id).conversation;
@@ -62,7 +62,7 @@ try {
     assert.throws(() => sendMessage(alice.id, conversation.id, conflict), (error: unknown) => error instanceof Error && "status" in error && error.status === 409);
     assert.throws(() => registerMessagingIdentity(alice.id, { ...a.registration, backupCiphertext: changed(a.registration.backupCiphertext) }));
     assert.throws(() => registerMessagingIdentity(alice.id, e.registration));
-    const unready = createUser("crypto_unready", "Unready", "password123");
+    const unready = await createUser("crypto_unready", "Unready", "password123");
     const chat = createConversation(alice.id, unready.id).conversation;
     assert.throws(() => sendMessage(alice.id, chat.id, envelope));
   });

@@ -11,7 +11,10 @@
     "seed": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed.ts",
     "test:backend": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-backend.ts",
     "test:api": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-api.ts",
-    "test:e2ee": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-e2ee.ts"
+    "test:e2ee": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-e2ee.ts",
+    "test:concurrency": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-concurrency.ts",
+    "seed:load": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed-load.ts",
+    "load:api": "node scripts/load-api.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -7,7 +7,9 @@
  * so every surface below is a shade of one of them.
  *   --accent      button and badge fill (#c5a7ff in both themes)
  *   --accent-fg   text on that fill (#403457 in both themes)
- *   --accent-ink  links, highlighted icons, the logo, focus rings
+ *   --accent-ink  highlighted icons, the logo, focus rings
+ *   --link        links inside text. Brighter than --accent-ink in light mode so they stand
+ *                 out from body copy.
  */
 
 /* Light theme: pale #c5a7ff tints, #403457 ink */
@@ -25,6 +27,7 @@
   --accent-fg: #403457;
   --accent-soft: oklch(0.787 0.126 299 / 0.24);
   --accent-ink: #403457;
+  --link: oklch(0.52 0.19 299);
   --like: oklch(0.6 0.23 15);
   --like-soft: oklch(0.6 0.23 15 / 0.1);
   --repost: oklch(0.6 0.15 155);
@@ -52,6 +55,7 @@
   --accent-fg: #403457;
   --accent-soft: oklch(0.787 0.126 299 / 0.14);
   --accent-ink: #c5a7ff;
+  --link: #c5a7ff;
   --like: oklch(0.7 0.2 10);
   --like-soft: oklch(0.7 0.2 10 / 0.14);
   --repost: oklch(0.76 0.14 160);
@@ -79,6 +83,7 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
   --color-accent-ink: var(--accent-ink);
+  --color-link: var(--link);
   --color-like: var(--like);
   --color-like-soft: var(--like-soft);
   --color-repost: var(--repost);
@@ -149,4 +154,112 @@
 @keyframes step-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
+}
+
+/* Landing page logo traces its strokes in on first load (components/logo.tsx `draw`). */
+@keyframes logo-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .logo-draw path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: logo-draw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.15s forwards;
+  }
+  .logo-draw path:nth-child(2) { animation-delay: 0.3s; }
+  .logo-draw path:nth-child(3) { animation-duration: 0.7s; animation-delay: 1.2s; }
+  .logo-draw path:nth-child(4) { animation-duration: 0.5s; animation-delay: 1.45s; }
+}
+
+/*
+ * Route transitions between the landing page and the auth card. Class names come from the
+ * <ViewTransition> props in app/page.tsx, app/(auth)/layout.tsx and app/(auth)/auth-form.tsx.
+ */
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+/* The logo and its ring fly between the landing page and the card. */
+::view-transition-group(.mark-morph),
+::view-transition-group(.ring-morph) {
+  animation-duration: 640ms;
+  animation-timing-function: var(--ease-out-soft);
+}
+::view-transition-image-pair(.mark-morph) {
+  animation: 640ms var(--ease-out-soft) via-blur;
+}
+@keyframes via-blur {
+  35% { filter: blur(2px); }
+}
+
+/*
+ * The landing copy and the auth card only exist on one side of the navigation, so a lone
+ * snapshot (:only-child) means the element is leaving or arriving.
+ */
+::view-transition-old(landing-copy):only-child {
+  animation: 220ms ease-in both landing-shift reverse;
+}
+::view-transition-new(landing-copy):only-child {
+  animation: 460ms var(--ease-out-soft) 160ms both landing-shift;
+}
+@keyframes landing-shift {
+  from { opacity: 0; translate: -40px 0; filter: blur(4px); }
+}
+
+/* The card rises in behind the arriving logo. */
+::view-transition-new(auth-card):only-child {
+  animation: 520ms var(--ease-out-soft) 140ms both card-rise;
+}
+::view-transition-old(auth-card):only-child {
+  animation: 220ms ease-in both card-rise reverse;
+}
+@keyframes card-rise {
+  from { opacity: 0; translate: 0 32px; scale: 0.96; }
+}
+
+/* Sign in ↔ sign up: the card resizes while the form slides. */
+::view-transition-group(.card-resize) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--ease-out-soft);
+}
+::view-transition-old(.card-resize),
+::view-transition-new(.card-resize) {
+  height: 100%;
+}
+::view-transition-old(.swap-left) {
+  --swap-to: -28px;
+  animation: 160ms ease-in both swap-out;
+}
+::view-transition-new(.swap-left) {
+  --swap-from: 28px;
+  animation: 320ms var(--ease-out-soft) 110ms both swap-in;
+}
+::view-transition-old(.swap-right) {
+  --swap-to: 28px;
+  animation: 160ms ease-in both swap-out;
+}
+::view-transition-new(.swap-right) {
+  --swap-from: -28px;
+  animation: 320ms var(--ease-out-soft) 110ms both swap-in;
+}
+@keyframes swap-out {
+  to { opacity: 0; translate: var(--swap-to) 0; filter: blur(2px); }
+}
+@keyframes swap-in {
+  from { opacity: 0; translate: var(--swap-from) 0; filter: blur(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }

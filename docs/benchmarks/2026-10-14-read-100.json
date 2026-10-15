@@ -1,0 +1,70 @@
+{
+  "clients": 100,
+  "configuredSeconds": 10,
+  "elapsedSeconds": 10.4,
+  "requests": 2385,
+  "requestsPerSecond": 228.4,
+  "failed": 0,
+  "routes": [
+    {
+      "route": "GET /users/me",
+      "requests": 478,
+      "statuses": {
+        "200": 478
+      },
+      "p50Ms": 424.2,
+      "p95Ms": 463.5,
+      "p99Ms": 875.1,
+      "maxMs": 906,
+      "meanMs": 424.4
+    },
+    {
+      "route": "GET /timeline?tab=following",
+      "requests": 477,
+      "statuses": {
+        "200": 477
+      },
+      "p50Ms": 425.5,
+      "p95Ms": 464.9,
+      "p99Ms": 848.4,
+      "maxMs": 890,
+      "meanMs": 426.4
+    },
+    {
+      "route": "GET /timeline?tab=for-you",
+      "requests": 476,
+      "statuses": {
+        "200": 476
+      },
+      "p50Ms": 442.9,
+      "p95Ms": 480.3,
+      "p99Ms": 875,
+      "maxMs": 906,
+      "meanMs": 441.8
+    },
+    {
+      "route": "GET /notifications/unread-count",
+      "requests": 476,
+      "statuses": {
+        "200": 476
+      },
+      "p50Ms": 426.4,
+      "p95Ms": 463.7,
+      "p99Ms": 844.6,
+      "maxMs": 874,
+      "meanMs": 425.1
+    },
+    {
+      "route": "GET /conversations/unread-count",
+      "requests": 478,
+      "statuses": {
+        "200": 478
+      },
+      "p50Ms": 424.4,
+      "p95Ms": 463.5,
+      "p99Ms": 845.3,
+      "maxMs": 890,
+      "meanMs": 424.3
+    }
+  ]
+}

@@ -1,13 +1,13 @@
 import "server-only";
 import type { Viewer, UserSummary, NotificationType } from "@/lib/types";
-import { getDb, transaction } from "../db";
+import { statement } from "../db";
 import { hashPassword, newId, tokenHash, verifyPassword } from "../security";
 import { randomBytes } from "node:crypto";
 
 type Param = string | number | null;
-export function all<T>(sql: string, ...params: Param[]): T[] { return getDb().prepare(sql).all(...params) as unknown as T[]; }
-export function one<T>(sql: string, ...params: Param[]): T | undefined { return getDb().prepare(sql).get(...params) as unknown as T | undefined; }
-export function run(sql: string, ...params: Param[]) { return getDb().prepare(sql).run(...params); }
+export function all<T>(sql: string, ...params: Param[]): T[] { return statement(sql).all(...params) as unknown as T[]; }
+export function one<T>(sql: string, ...params: Param[]): T | undefined { return statement(sql).get(...params) as unknown as T | undefined; }
+export function run(sql: string, ...params: Param[]) { return statement(sql).run(...params); }
 export const placeholders = (items: unknown[]) => items.map(() => "?").join(",");
 export type UserRow = {
   id: string; username: string; username_lower: string; display_name: string; password_hash: string;
@@ -20,29 +20,28 @@ export function viewerById(id: string): Viewer | null {
 }
 export const userByUsername = (username: string) => one<UserRow>("SELECT * FROM users WHERE username_lower = ?", username.toLowerCase());
 export const RESERVED_USERNAMES = new Set(["home", "explore", "notifications", "bookmarks", "login", "signup", "api", "settings", "search", "compose", "messages", "welcome"]);
-export function createUser(username: string, displayName: string, password: string): Viewer {
+export async function createUser(username: string, displayName: string, password: string): Promise<Viewer> {
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username)) throw new Error("Username must be 3–15 letters, numbers, or underscores");
   if (RESERVED_USERNAMES.has(username.toLowerCase())) throw new Error("That username isn't available");
   if (!displayName.trim() || [...displayName.trim()].length > 50) throw new Error("Display name must be 1–50 characters");
   if ([...password].length < 8) throw new Error("Password must be at least 8 characters");
   if ([...password].length > 1024) throw new Error("Password must be at most 1024 characters");
   const id = newId();
-  run("INSERT INTO users(id,username,username_lower,display_name,password_hash,created_at) VALUES(?,?,?,?,?,?)", id, username, username.toLowerCase(), displayName.trim(), hashPassword(password), Date.now());
+  run("INSERT INTO users(id,username,username_lower,display_name,password_hash,created_at) VALUES(?,?,?,?,?,?)", id, username, username.toLowerCase(), displayName.trim(), await hashPassword(password), Date.now());
   return viewerById(id)!;
 }
-const dummyHash = hashPassword(randomBytes(24).toString("hex"));
-export function authenticate(username: string, password: string): Viewer | null {
+// A valid-format unknown-account hash keeps failed logins on the same KDF path.
+const dummyHash = `${"0".repeat(32)}:${"0".repeat(128)}`;
+export async function authenticate(username: string, password: string): Promise<Viewer | null> {
+  if (password.length > 4096 || [...password].length > 1024) return null;
   const user = userByUsername(username);
-  const valid = verifyPassword(password, user?.password_hash || dummyHash);
+  const valid = await verifyPassword(password, user?.password_hash || dummyHash);
   return user && valid ? { ...summary(user), bio: user.bio } : null;
 }
 export const SESSION_AGE = 30 * 24 * 60 * 60;
 export function createSession(userId: string): { token: string; expires: Date } {
   const token = randomBytes(32).toString("hex"), expires = new Date(Date.now() + SESSION_AGE * 1000);
-  transaction(() => {
-    run("DELETE FROM sessions WHERE expires_at <= ?", Date.now());
-    run("INSERT INTO sessions VALUES(?,?,?)", tokenHash(token), userId, expires.getTime());
-  });
+  run("INSERT INTO sessions VALUES(?,?,?)", tokenHash(token), userId, expires.getTime());
   return { token, expires };
 }
 export function viewerForToken(token: string): Viewer | null {

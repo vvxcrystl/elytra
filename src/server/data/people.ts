@@ -28,7 +28,7 @@ export function followersOf(username: string, viewerId: string | null, direction
   const user = userByUsername(username);
   if (!user) return [];
   const followers = direction === "followers";
-  return listUsers(all<UserRow>(`SELECT u.* FROM users u JOIN follows f ON u.id=f.${followers ? "follower_id" : "followee_id"} WHERE f.${followers ? "followee_id" : "follower_id"}=? ORDER BY f.created_at DESC,u.id`, user.id), viewerId);
+  return listUsers(all<UserRow>(`SELECT u.* FROM users u JOIN follows f ON u.id=f.${followers ? "follower_id" : "followee_id"} WHERE f.${followers ? "followee_id" : "follower_id"}=? ORDER BY f.created_at DESC,u.id LIMIT 100`, user.id), viewerId);
 }
 export function findUsers(q: string, limit: number, viewerId: string | null): UserListItem[] {
   const needle = q.trim().replace(/^@/, "").toLowerCase();
@@ -90,4 +90,4 @@ export function notificationsFor(viewerId: string | null, mentionsOnly = false):
 }
 export const visibleNotificationSql = `NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=n.user_id AND b.target_id=n.actor_id) OR (b.user_id=n.actor_id AND b.target_id=n.user_id)) AND NOT EXISTS(SELECT 1 FROM mutes m WHERE m.user_id=n.user_id AND m.target_id=n.actor_id)`;
 export const unreadCount = (viewerId: string | null): number => viewerId ? one<{ count: number }>(`SELECT COUNT(*) AS count FROM notifications n WHERE user_id=? AND read=0 AND ${visibleNotificationSql}`, viewerId)!.count : 0;
-export function readNotifications(viewerId: string): void { run("UPDATE notifications SET read=1 WHERE user_id=?", viewerId); }
+export function readNotifications(viewerId: string): void { run("UPDATE notifications SET read=1 WHERE user_id=? AND read=0", viewerId); }

@@ -4,7 +4,7 @@ The base URL is `/api/v1`.
 
 - `GET /api/v1` lists the operations.
 - `GET /api/v1/openapi.json` is an OpenAPI 3.1 document with request and response schemas. Import it into a client generator.
-- `GET /api/v1/health` checks the database connection.
+- `GET /api/v1/health` checks the database connection; `/api/v1/health/live` checks process liveness. Both bypass rate limits and admission budgets.
 
 The API shares the website's database, sessions, notifications, and feed ranking. It needs no external services or new packages. Tables and indexes migrate additively on startup, so existing accounts and posts survive.
 
@@ -65,7 +65,7 @@ Pass `limit` (1 to 100, default 20) and the opaque `cursor` to load more. Stop w
 
 ### How pages stay stable
 
-Feeds use frozen snapshots. Posts, likes, and reposts added after page one don't shift later pages. Feed cursors expire after 24 hours. Removed activity, dismissed posts, blocks, and mutes still apply to an existing snapshot.
+Feeds use frozen snapshots. Posts, likes, and reposts added after page one don't shift later pages. Feeds retain at most 1,000 events by default. Cursors expire after at most 24 hours and can be evicted earlier when an account exceeds its 32-snapshot retention budget across sources. Identical refreshes reuse the latest snapshot. Start a fresh feed after `invalid_cursor`. Removed activity, dismissed posts, blocks, and mutes still apply to an existing snapshot.
 
 Other collections use keyset pagination:
 
@@ -90,11 +90,13 @@ Dates are UTC ISO 8601 strings. Resource IDs are opaque strings. An error looks 
 | 404 | Missing or inaccessible resource |
 | 405 | Unsupported method |
 | 409 | Conflict |
+| 408 | Request body timed out or was aborted |
 | 413 | Body too large |
 | 415 | Unsupported content type |
 | 429 | Rate limited |
+| 503 | Capacity exhausted or database busy; honor `Retry-After` |
 
-A server failure returns a generic 500 message. The `X-Request-Id` header lets you find the matching entry in the server logs. Every response sets `Cache-Control: no-store`. HEAD and OPTIONS work.
+A server failure returns a generic 500 message. The `X-Request-Id` header lets you find the matching entry in the server logs. Every response sets `Cache-Control: no-store`. Normal API responses also include application duration in `Server-Timing`. HEAD and OPTIONS work.
 
 ### Strict validation
 
@@ -109,7 +111,7 @@ JSON bodies can be up to 64 KiB. Encrypted-message requests can be up to 128 KiB
 - `POST /posts` creates a post. All fields are optional: `content` (280 characters), `replyToId`, `quoteId`, and `mediaIds` (up to four). A post needs content, images, or a quote.
 - `GET /posts/:id` returns a post with its author, images, optional quote or parent, counts, and the viewer's interaction flags.
 - `DELETE /posts/:id` is for the author only. It removes the post's activity and images. Replies stay, and quotes of the post become tombstones.
-- `GET /posts/:id/thread` returns the ancestors, the target post, and its immediate replies. For a large conversation, page the replies separately.
+- `GET /posts/:id/thread` returns up to 100 ancestors, the target post, and up to 100 immediate replies. For a large conversation, page the replies separately.
 - `GET /posts/:id/replies` and `GET /posts/:id/quotes` return paginated related posts.
 - `GET /posts/:id/likes` and `GET /posts/:id/reposts` return paginated accounts that interacted. Bookmark owners are private.
 - `PUT /posts/:id/like`, `PUT /posts/:id/repost`, and `PUT /posts/:id/bookmark` set the interaction. `DELETE` on the same path removes it. These calls are idempotent and return `{active, count}`. A repeated request doesn't toggle the state or send a second notification.
@@ -235,12 +237,12 @@ Quotas use fixed windows stored in SQLite. They survive restarts and are shared 
 | --- | --- |
 | Authenticated reads | 600 per account per minute |
 | Authenticated mutations | 120 per account per minute |
-| Anonymous reads | 600 per minute, shared by all anonymous callers |
-| Anonymous mutations | 60 per minute, shared by all anonymous callers |
-| Login | 60 attempts per minute globally, and 10 per username per 15 minutes (successful logins count) |
-| Registration | 20 requests per hour globally |
+| Anonymous reads | 600 per trusted client identity per minute |
+| Anonymous mutations | 60 per trusted client identity per minute |
+| Login | 60 attempts per client per minute, and 10 per username per 15 minutes (successful logins count) |
+| Registration | 20 requests per client per hour |
 
-Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` (Unix seconds) for the general quota. Login and registration quotas can be stricter than the general one. On a 429, wait the number of seconds in `Retry-After`. Anonymous limits don't trust forwarded IP headers, because clients can spoof them.
+Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` (Unix seconds) for the general quota. Login and registration quotas can be stricter than the general one. On a 429, wait the number of seconds in `Retry-After`. Forwarded identity is ignored unless `ELYTRA_TRUSTED_IP_HEADER` explicitly names a header overwritten by a trusted ingress. Without that configuration, anonymous callers share one bucket. See [backend operations](BACKEND.md) for the ingress boundary, capacity budgets, request deadlines, and load testing.
 
 ### Environment variables
 
@@ -249,6 +251,7 @@ Responses include `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset
 | `ELYTRA_DB_PATH` | SQLite database file | `data/elytra.db` |
 | `ELYTRA_UPLOAD_DIR` | Upload directory | `data/uploads` |
 | `ELYTRA_PUBLIC_ORIGIN` | Public origin for cookie write checks behind a proxy | unset |
+| `ELYTRA_TRUSTED_IP_HEADER` | Trusted, overwritten ingress header for anonymous quotas | unset |
 
 Like the website, the API runs on the Node.js runtime and needs persistent local storage.
 
@@ -259,3 +262,5 @@ Sessions are first-party tokens, not OAuth access tokens. The API has no lists, 
 - `npm run test:api` covers all 59 operations, schema validation, access checks, cursors, blocking and muting, media ownership, rollback and cleanup, rate limits, and migrations. It uses an in-memory database and a temporary upload directory.
 - `npm run test:backend` checks existing backend behavior and recommendation performance.
 - `npm run test:e2ee` checks sender and recipient decryption, signature and ciphertext tampering, recovery, Unicode bounds, and removal of legacy bodies from the database and WAL files.
+
+- `npm run test:concurrency` checks capacity recovery, deadlines, competing writers, bounded retention, counter consistency, and streaming with isolated files.

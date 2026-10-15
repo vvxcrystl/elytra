@@ -1,0 +1,94 @@
+{
+  "clients": 25,
+  "configuredSeconds": 10,
+  "elapsedSeconds": 10.1,
+  "requests": 3084,
+  "requestsPerSecond": 306.7,
+  "failed": 0,
+  "routes": [
+    {
+      "route": "GET /users/me",
+      "requests": 439,
+      "statuses": {
+        "200": 439
+      },
+      "p50Ms": 70.5,
+      "p95Ms": 137.8,
+      "p99Ms": 197.1,
+      "maxMs": 239,
+      "meanMs": 77.7
+    },
+    {
+      "route": "GET /timeline?tab=following",
+      "requests": 440,
+      "statuses": {
+        "200": 440
+      },
+      "p50Ms": 76,
+      "p95Ms": 136.4,
+      "p99Ms": 206.3,
+      "maxMs": 219,
+      "meanMs": 80.3
+    },
+    {
+      "route": "GET /timeline?tab=for-you",
+      "requests": 441,
+      "statuses": {
+        "200": 441
+      },
+      "p50Ms": 95.4,
+      "p95Ms": 171.1,
+      "p99Ms": 220.7,
+      "maxMs": 243,
+      "meanMs": 99.4
+    },
+    {
+      "route": "GET /notifications/unread-count",
+      "requests": 443,
+      "statuses": {
+        "200": 443
+      },
+      "p50Ms": 78.6,
+      "p95Ms": 139.6,
+      "p99Ms": 185.9,
+      "maxMs": 202,
+      "meanMs": 81
+    },
+    {
+      "route": "GET /conversations/unread-count",
+      "requests": 442,
+      "statuses": {
+        "200": 442
+      },
+      "p50Ms": 75.5,
+      "p95Ms": 144.6,
+      "p99Ms": 206.7,
+      "maxMs": 227,
+      "meanMs": 81
+    },
+    {
+      "route": "PUT /posts/load_post_0/like",
+      "requests": 440,
+      "statuses": {
+        "200": 440
+      },
+      "p50Ms": 70.2,
+      "p95Ms": 133.1,
+      "p99Ms": 168.9,
+      "maxMs": 219,
+      "meanMs": 75.4
+    },
+    {
+      "route": "DELETE /posts/load_post_0/like",
+      "requests": 439,
+      "statuses": {
+        "200": 439
+      },
+      "p50Ms": 68,
+      "p95Ms": 137.7,
+      "p99Ms": 200.3,
+      "maxMs": 239,
+      "meanMs": 74.5
+    }
+  ]
+}

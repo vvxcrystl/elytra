@@ -114,7 +114,7 @@ export function Composer({
         {replyTo && expanded && compact && (
           <p className="pt-1 text-[15px] text-fg-muted">
             Replying to{" "}
-            <span className="text-accent-ink">@{replyTo.author.username}</span>
+            <span className="text-link">@{replyTo.author.username}</span>
           </p>
         )}
         <div className={clsx("flex gap-3", compact && !expanded && "items-center")}>
@@ -243,7 +243,7 @@ function HighlightedText({ text }: { text: string }) {
     const index = match.index ?? 0;
     if (index > last) parts.push(text.slice(last, index));
     parts.push(
-      <span key={index} className="text-accent-ink">
+      <span key={index} className="text-link">
         {match[0]}
       </span>,
     );

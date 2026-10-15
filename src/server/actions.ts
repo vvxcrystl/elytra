@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { ActionResult, FormState, TimelineSource, Page, FeedItem } from "@/lib/types";
@@ -13,6 +13,9 @@ import { editProfile, profileByUsername, toggleFollowUser, readNotifications } f
 import { validTimelineSource } from "./data/timeline";
 import { saveImpressions, saveNotInterested } from "./data/feedback";
 import { validateImage, saveImage, removeImages } from "./media";
+import { sharedCapacity } from "./concurrency";
+import { backendConfig } from "./config";
+import { limitAuthAttempt, limitRegistration } from "./rate-limit";
 
 const SIGN_IN_ERROR = "You need to sign in";
 const refresh = () => revalidatePath("/", "layout");
@@ -43,7 +46,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   if (password.length < 8) fieldErrors.password = "Password must be at least 8 characters";
   if (Object.keys(fieldErrors).length) return { fieldErrors };
   let id: string;
-  try { id = createUser(username, username, password).id; }
+  try { limitRegistration(await headers()); id = (await createUser(username, username, password)).id; }
   catch (error) {
     if (userByUsername(username)) return { fieldErrors: { username: "That username is already taken" } };
     console.error("Unable to create account", error);
@@ -57,7 +60,11 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   if (!(formData instanceof FormData)) return { error: "Invalid username or password" };
   const username = text(formData, "username").trim(), password = text(formData, "password");
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username) || !password) return { error: "Invalid username or password" };
-  const user = authenticate(username, password);
+  let user;
+  try {
+    limitAuthAttempt(await headers(), username);
+    user = await authenticate(username, password);
+  } catch (error) { return { error: errorMessage(error) }; }
   if (!user) return { error: "Invalid username or password" };
   await setSession(user.id);
   refresh();
@@ -74,8 +81,9 @@ export async function createPost(formData: FormData): Promise<ActionResult<{ id:
   const viewer = await getViewer();
   if (!viewer) return { ok: false, error: SIGN_IN_ERROR };
   const saved: string[] = [];
-  let id: string;
+  let id: string, release: (() => void) | undefined;
   try {
+    release = await sharedCapacity("uploads", backendConfig().uploadConcurrency).acquire();
     if (!(formData instanceof FormData)) throw new Error("Invalid form");
     const content = text(formData, "content").trim(), replyToId = optionalId(formData, "replyToId"), quoteId = optionalId(formData, "quoteId");
     if ([...content].length > POST_MAX_LENGTH) throw new Error(`Posts can be at most ${POST_MAX_LENGTH} characters`);
@@ -89,6 +97,7 @@ export async function createPost(formData: FormData): Promise<ActionResult<{ id:
     for (const image of images) saved.push(await saveImage(image));
     id = insertPost(viewer.id, { content, replyToId, quoteId, imageUrls: saved });
   } catch (error) { await removeImages(saved); return { ok: false, error: errorMessage(error) }; }
+  finally { release?.(); }
   refresh();
   return { ok: true, data: { id } };
 }
@@ -165,8 +174,9 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
   }
   if (Object.keys(fieldErrors).length) return { fieldErrors };
   const saved: string[] = [];
-  let obsolete: string[] = [];
+  let obsolete: string[] = [], release: (() => void) | undefined;
   try {
+    release = await sharedCapacity("uploads", backendConfig().uploadConcurrency).acquire();
     const avatar = formData.get("avatar"), banner = formData.get("banner");
     if ((avatar !== null && !(avatar instanceof File)) || (banner !== null && !(banner instanceof File))) throw new Error("Invalid image upload");
     const avatarImage = avatar instanceof File && avatar.size > 0 ? await validateImage(avatar) : null;
@@ -177,6 +187,7 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
     else if (bannerImage) { bannerUrl = await saveImage(bannerImage); saved.push(bannerUrl); }
     obsolete = editProfile(viewer.id, { displayName, bio, location, website, avatarUrl, bannerUrl });
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
+  finally { release?.(); }
   await removeImages(obsolete);
   refresh();
   return { success: true };
@@ -194,14 +205,16 @@ export async function saveOnboardingProfile(_prev: FormState, formData: FormData
   const current = profileByUsername(viewer.username, viewer.id);
   if (!current) return { error: SIGN_IN_ERROR };
   const saved: string[] = [];
-  let obsolete: string[] = [];
+  let obsolete: string[] = [], release: (() => void) | undefined;
   try {
+    release = await sharedCapacity("uploads", backendConfig().uploadConcurrency).acquire();
     const avatar = formData.get("avatar");
     if (avatar !== null && !(avatar instanceof File)) throw new Error("Invalid image upload");
     let avatarUrl: string | undefined;
     if (avatar instanceof File && avatar.size > 0) { avatarUrl = await saveImage(await validateImage(avatar)); saved.push(avatarUrl); }
     obsolete = editProfile(viewer.id, { displayName, bio, location: current.location, website: current.website, avatarUrl });
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
+  finally { release?.(); }
   await removeImages(obsolete);
   refresh();
   return { success: true };

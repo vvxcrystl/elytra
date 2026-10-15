@@ -1,5 +1,6 @@
 import "server-only";
 import { all, placeholders } from "./core";
+import { backendConfig } from "../config";
 
 const DAY = 86400000;
 const POOL = 150;
@@ -28,13 +29,15 @@ export const RECAP_WEIGHTS = { like: 0.5, repost: 1, reply: 13.5, profile: 12, a
 
 // A shared event shape batches graph traversals and feature hydration. Quotes are
 // distinct from replies, and bookmarks influence affinity without inventing a recap weight.
-function events(since: number): string {
+function events(since: number, filter: { actors?: string; posts?: string } = {}): string {
+  const where = (actor: string, post: string) => `${filter.actors ? ` AND ${actor} ${filter.actors}` : ""}${filter.posts ? ` AND ${post} ${filter.posts}` : ""}`;
+  const index = (name: string) => filter.posts ? ` INDEXED BY ${name}` : "";
   return `events AS (
-    SELECT post_id,user_id,'likes' AS kind,created_at FROM likes WHERE created_at>=${since}
-    UNION ALL SELECT post_id,user_id,'reposts',created_at FROM reposts WHERE created_at>=${since}
-    UNION ALL SELECT post_id,user_id,'bookmarks',created_at FROM bookmarks WHERE created_at>=${since}
-    UNION ALL SELECT reply_to_id,author_id,'replies',created_at FROM posts WHERE reply_to_id IS NOT NULL AND created_at>=${since}
-    UNION ALL SELECT quote_id,author_id,'quotes',created_at FROM posts WHERE quote_id IS NOT NULL AND created_at>=${since}
+    SELECT post_id,user_id,'likes' AS kind,created_at FROM likes${index("likes_post")} WHERE created_at>=${since}${where("user_id", "post_id")}
+    UNION ALL SELECT post_id,user_id,'reposts',created_at FROM reposts${index("reposts_post")} WHERE created_at>=${since}${where("user_id", "post_id")}
+    UNION ALL SELECT post_id,user_id,'bookmarks',created_at FROM bookmarks${index("bookmarks_post")} WHERE created_at>=${since}${where("user_id", "post_id")}
+    UNION ALL SELECT reply_to_id,author_id,'replies',created_at FROM posts${index("posts_reply")} WHERE reply_to_id IS NOT NULL AND created_at>=${since}${where("author_id", "reply_to_id")}
+    UNION ALL SELECT quote_id,author_id,'quotes',created_at FROM posts${index("posts_quote")} WHERE quote_id IS NOT NULL AND created_at>=${since}${where("author_id", "quote_id")}
   )`;
 }
 
@@ -88,21 +91,23 @@ function rankCandidates(viewerId: string | null, now: number, includeSeen: boole
     WHERE ${eligible} AND r.user_id IN (SELECT followee_id FROM follows WHERE follower_id=?)
     ORDER BY r.created_at DESC,r.user_id,p.id LIMIT ${POOL}`, ...viewerArgs, viewerId), true);
   // UTEG/GraphJet-like traversal: viewer -> followed actor -> engaged post.
-  add(all<Row>(`WITH ${events(since)} SELECT p.* FROM posts p JOIN events e ON e.post_id=p.id
-    JOIN follows f ON f.followee_id=e.user_id AND f.follower_id=? WHERE ${eligible}
+  add(all<Row>(`WITH context AS (SELECT ? AS id), ${events(since, { actors: "IN (SELECT followee_id FROM follows WHERE follower_id=(SELECT id FROM context))" })}
+    SELECT p.* FROM posts p JOIN events e ON e.post_id=p.id WHERE ${eligible}
     GROUP BY p.id ORDER BY COUNT(DISTINCT e.user_id) DESC,MAX(e.created_at) DESC,p.id LIMIT ${POOL}`, viewerId, ...viewerArgs));
   const similarAuthors = [...new Set([...relationships.keys(), ...neighbors.keys()])].filter(id => authorSimilarity(id) >= STRONG_SIMILARITY).slice(0, POOL);
   if (tags.length || similarAuthors.length) {
     const matches = tags.length ? `(SELECT COUNT(*) FROM hashtags h WHERE h.post_id=p.id AND h.tag IN (${placeholders(tags)}))` : "0";
     const authors = similarAuthors.length ? `p.author_id IN (${placeholders(similarAuthors)})` : "0";
-    add(all<Row>(`SELECT * FROM (SELECT p.*,${matches} AS matched FROM posts p WHERE ${eligible}
-      AND (${authors} OR ${tags.length ? `EXISTS(SELECT 1 FROM hashtags h WHERE h.post_id=p.id AND h.tag IN (${placeholders(tags)}))` : "0"}))
+    add(all<Row>(`SELECT p.*,${matches} AS matched FROM (SELECT p.* FROM posts p WHERE ${eligible}
+      AND (${authors} OR ${tags.length ? `EXISTS(SELECT 1 FROM hashtags h WHERE h.post_id=p.id AND h.tag IN (${placeholders(tags)}))` : "0"})
+      ORDER BY p.created_at DESC,p.id DESC LIMIT ${backendConfig().snapshotEntries}) p
       ORDER BY matched DESC,created_at DESC,id DESC LIMIT ${POOL}`, ...tags, ...viewerArgs, ...similarAuthors, ...tags));
   }
   // Cold-start exploration is the only exception to personalized out-of-network proof.
-  if (coldStart) add(all<Row>(`SELECT p.* FROM posts p WHERE ${eligible} ORDER BY
-    ((SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id)+2*(SELECT COUNT(*) FROM reposts r WHERE r.post_id=p.id)
-      +3*(SELECT COUNT(*) FROM posts c WHERE c.reply_to_id=p.id)+2*(SELECT COUNT(*) FROM bookmarks b WHERE b.post_id=p.id))
+  if (coldStart) add(all<Row>(`SELECT p.* FROM (
+    SELECT p.* FROM posts p WHERE ${eligible} ORDER BY p.created_at DESC,p.id DESC LIMIT ${backendConfig().snapshotEntries}
+    ) p JOIN post_stats s ON s.post_id=p.id ORDER BY
+    (s.likes+2*s.reposts+3*s.replies+2*s.bookmarks)
       /(1.0+(${now}-p.created_at)/${DAY}.0) DESC,p.created_at DESC,p.id DESC LIMIT ${POOL}`, ...viewerArgs));
   if (!pool.size) return [];
   const ids = [...pool.keys()], authors = [...new Set([...pool.values()].map(p => p.author_id))];
@@ -124,10 +129,13 @@ function rankCandidates(viewerId: string | null, now: number, includeSeen: boole
     WHERE user_id=? AND last_seen_at>=? AND post_id IN (${placeholders(ids)})`, viewerId, now - 30 * DAY, ...ids).map(r => [r.post_id, r.seen_count]));
   const media = new Set(all<{ post_id: string }>(`SELECT DISTINCT post_id FROM post_images WHERE post_id IN (${placeholders(ids)})`, ...ids).map(r => r.post_id));
   const mentions = new Set(all<{ post_id: string }>(`SELECT post_id FROM mentions WHERE user_id=? AND post_id IN (${placeholders(ids)})`, viewerId, ...ids).map(r => r.post_id));
-  const authorCounts = new Map(authors.map(id => [id, blankCounts()]));
-  for (const row of all<{ author_id: string; kind: keyof Counts; n: number }>(`WITH ${events(historySince)} SELECT p.author_id,e.kind,COUNT(*) AS n
-    FROM posts p JOIN events e ON e.post_id=p.id WHERE p.created_at>=? AND p.author_id IN (${placeholders(authors)})
-    GROUP BY p.author_id,e.kind`, now - 30 * DAY, ...authors)) authorCounts.get(row.author_id)![row.kind] = row.n;
+  // A post newer than the 30-day author window cannot have valid interactions older than the 90-day event cutoff.
+  // Aggregate its trigger-maintained counters rather than materializing all events.
+  const authorCounts = new Map(all<{ author_id: string } & Counts>(`SELECT p.author_id,
+    SUM(s.likes) likes,SUM(s.reposts) reposts,SUM(s.replies) replies,SUM(s.bookmarks) bookmarks,
+    SUM((SELECT COUNT(*) FROM posts q WHERE q.quote_id=p.id)) quotes,0 recent,0 impressions
+    FROM posts p JOIN post_stats s ON s.post_id=p.id WHERE p.created_at>=? AND p.author_id IN (${placeholders(authors)})
+    GROUP BY p.author_id`, now - 30 * DAY, ...authors).map(r => [r.author_id, r]));
   const authorPosts = new Map(all<{ author_id: string; n: number }>(`SELECT author_id,COUNT(*) AS n FROM posts
     WHERE created_at>=? AND author_id IN (${placeholders(authors)}) GROUP BY author_id`, now - 30 * DAY, ...authors).map(r => [r.author_id, r.n]));
   const authorViews = new Map(all<{ author_id: string; n: number; mine: number }>(`SELECT p.author_id,COUNT(*) AS n,SUM(i.user_id=?) AS mine
@@ -135,8 +143,8 @@ function rankCandidates(viewerId: string | null, now: number, includeSeen: boole
     GROUP BY p.author_id`, viewerId, ...authors, now - 90 * DAY).map(r => [r.author_id, r]));
   const feedback = new Map(all<{ author_id: string; n: number; last: number }>(`SELECT author_id,COUNT(*) AS n,MAX(created_at) AS last
     FROM negative_feedback WHERE user_id=? AND created_at>=? GROUP BY author_id`, viewerId, now - 30 * DAY).map(r => [r.author_id, r]));
-  const reciprocal = new Map(all<{ user_id: string; n: number }>(`WITH ${events(historySince)} SELECT e.user_id,COUNT(*) AS n
-    FROM events e JOIN posts p ON p.id=e.post_id WHERE p.author_id=? AND e.user_id IN (${placeholders(authors)}) GROUP BY e.user_id`, viewerId, ...authors).map(r => [r.user_id, r.n]));
+  const reciprocal = new Map(all<{ user_id: string; n: number }>(`WITH context AS (SELECT ? AS id), ${events(historySince, { posts: "IN (SELECT id FROM posts WHERE author_id=(SELECT id FROM context))" })}
+    SELECT e.user_id,COUNT(*) AS n FROM events e WHERE e.user_id IN (${placeholders(authors)}) GROUP BY e.user_id`, viewerId, ...authors).map(r => [r.user_id, r.n]));
   // Resolve full reply ancestry in one query. Siblings and nested replies share one key.
   // Corrupt cycles / chains deeper than 100 are discarded instead of repeated in the feed.
   const conversations = new Map(all<{ candidate: string; root: string }>(`WITH RECURSIVE chain(candidate,id,parent,depth,path) AS (

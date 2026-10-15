@@ -13,7 +13,7 @@ const TOKEN = new RegExp(
   "gu",
 );
 
-const linkClass = "text-accent-ink hover:underline";
+const linkClass = "text-link hover:underline";
 
 export function RichText({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
