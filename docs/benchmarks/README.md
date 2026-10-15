@@ -1,5 +1,7 @@
 # Local backend measurements — October 14, 2026
 
+For compiler and build measurements, see the [ts-rust comparison](2026-10-14-ts-rust.md).
+
 Measured the final backend through the production Next standalone server over loopback HTTP, with the default backend settings and demo seeding disabled. The fixture contained 100 independent accounts, 10,000 posts, 30,000 initial likes, and ten follows per account. The load driver and server shared an AMD Ryzen 7 7700 host (16 available logical CPUs, about 30 GiB RAM), Linux x64, Node 26.10.0, Next 16.4.0. The SQLite file was on **tmpfs**, so these results exclude physical disk durability latency.
 
 After a three-second warm-up, each test generated ten seconds of closed-loop traffic with no think time, retries, or application request logging. The reported elapsed time also includes draining in-flight requests. Each client used a distinct authenticated account.

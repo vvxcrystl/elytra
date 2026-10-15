@@ -2,7 +2,7 @@
 
 # elytra
 
-A Twitter-style social app built with Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. It needs no external services and has no native dependencies.
+A Twitter-style social app built with Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. It needs no external services.
 
 ## Run it
 
@@ -62,7 +62,10 @@ Other:
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Starts the dev server |
-| `npm run build` | Builds for production |
+| `npm run build` | Generates route types, checks with ts-rust, then builds for production |
+| `npm run typecheck` | Generates route types and checks with ts-rust (`tsc-rs`) |
+| `npm run typecheck:tsc` | Runs the original TypeScript checker for comparison |
+| `npm run bench:typecheck` | Compares full and cached checks; add `-- --build` to also measure production builds |
 | `npm start` | Runs the production server |
 | `npm run seed` | Wipes `data/elytra.db` and reseeds the demo data |
 | `npm run test:backend` | Runs the data-layer integration checks against an in-memory database |
@@ -72,6 +75,8 @@ Other:
 | `npm run seed:load` | Creates a new isolated load-test database and private fixture tokens |
 | `npm run load:api` | Measures mixed HTTP traffic against an explicitly configured test server |
 | `npm run lint` | Runs ESLint |
+
+Type checking uses [pingdotgg/ts-rust](https://github.com/pingdotgg/ts-rust), pinned to `tsc-rs` 0.7.0. Keep npm's optional dependencies enabled to install its platform binary. TypeScript 5 remains installed for editor tooling and comparison. The build stops if the Rust check fails, then skips Next's duplicate check for that build process. Running `next build` directly still uses Next's original checker. See the [local compiler benchmark](docs/benchmarks/2026-10-14-ts-rust.md) for results and reproduction steps.
 
 ## Code layout
 

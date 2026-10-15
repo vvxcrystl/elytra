@@ -1,0 +1,501 @@
+{
+  "measuredAt": "2026-10-15T03:51:55.989Z",
+  "revision": "6c25d7e27641684314e43866f902fc27515615d3",
+  "node": "v26.10.0",
+  "system": {
+    "platform": "linux",
+    "release": "7.2.9-1-cachyos",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+    "availableCpus": 16,
+    "totalMemoryBytes": 32673042432
+  },
+  "versions": {
+    "typescript": "5.9.3",
+    "tsc-rs": "0.7.0",
+    "next": "16.4.0"
+  },
+  "runs": 7,
+  "warmupsPerScenario": 1,
+  "projectFileCount": 150,
+  "inputSha256": "29e3d4fdb64aa42a6b31888e4164da816a9e4b1242a280611f92755973d516eb",
+  "inputFileCounts": {
+    "tsc": 709,
+    "tsc-rs": 719
+  },
+  "tsconfigSha256": "5c51df4c59f4510d8c7dadf07a5c32132228826a3b331da5e286207b4df7ef9c",
+  "method": "Elapsed wall time includes Node CLI startup. Sequential runs, alternating compiler order. All commands must exit 0. No OS filesystem-cache eviction. Default compiler thread counts. GOPORT_* cleared. Route types generated once outside compiler timings. Build timings include each build's own preparation. Build caches are warmed separately and retained.",
+  "results": [
+    {
+      "scenario": "full",
+      "description": "Full check, incremental disabled; filesystem cache remains warm",
+      "warmups": {
+        "tsc": {
+          "elapsedMs": 2153.5899,
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0
+        },
+        "tsc-rs": {
+          "elapsedMs": 109.32941500000015,
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0
+        }
+      },
+      "executionOrder": [
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs"
+      ],
+      "compilers": [
+        {
+          "name": "tsc",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/node_modules/typescript/bin/tsc",
+            "--project",
+            "tsconfig.json",
+            "--noEmit",
+            "--pretty",
+            "false",
+            "--incremental",
+            "false"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 2205.904981,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2260.391694,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2143.534223999999,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2204.3825930000003,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2203.2957270000006,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2171.272325,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2129.865410000002,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 2203.2957270000006,
+          "minMs": 2129.865410000002,
+          "maxMs": 2260.391694
+        },
+        {
+          "name": "tsc-rs",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/node_modules/tsc-rs/lib/tsc.js",
+            "--project",
+            "tsconfig.json",
+            "--noEmit",
+            "--pretty",
+            "false",
+            "--incremental",
+            "false"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 113.01533800000016,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 134.87890999999945,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 126.28326300000117,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 125.44476399999985,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 143.65053500000067,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 126.15964299999905,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 122.16644399999859,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 126.15964299999905,
+          "minMs": 113.01533800000016,
+          "maxMs": 143.65053500000067
+        }
+      ],
+      "speedup": 17.464346558114602,
+      "reductionPercent": 94.27404857850028
+    },
+    {
+      "scenario": "cached",
+      "description": "Unchanged incremental check; separate temporary cache per compiler",
+      "warmups": {
+        "tsc": {
+          "elapsedMs": 2239.5495279999996,
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0
+        },
+        "tsc-rs": {
+          "elapsedMs": 135.31135699999868,
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0
+        }
+      },
+      "executionOrder": [
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs"
+      ],
+      "compilers": [
+        {
+          "name": "tsc",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/node_modules/typescript/bin/tsc",
+            "--project",
+            "tsconfig.json",
+            "--noEmit",
+            "--pretty",
+            "false",
+            "--incremental",
+            "true",
+            "--tsBuildInfoFile",
+            "/tmp/elytra-typecheck-OvnFeO/tsc.tsbuildinfo"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 832.7786739999974,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 853.0798729999988,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 855.2340230000009,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 840.4135510000015,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 867.186733999999,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 893.3201659999977,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 872.5382859999991,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 855.2340230000009,
+          "minMs": 832.7786739999974,
+          "maxMs": 893.3201659999977
+        },
+        {
+          "name": "tsc-rs",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/node_modules/tsc-rs/lib/tsc.js",
+            "--project",
+            "tsconfig.json",
+            "--noEmit",
+            "--pretty",
+            "false",
+            "--incremental",
+            "true",
+            "--tsBuildInfoFile",
+            "/tmp/elytra-typecheck-OvnFeO/tsc-rs.tsbuildinfo"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 69.22281600000133,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 61.10404800000106,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 72.1174170000013,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 73.11498900000151,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 67.88470000000234,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 73.78132499999992,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 74.9261869999973,
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 72.1174170000013,
+          "minMs": 61.10404800000106,
+          "maxMs": 74.9261869999973
+        }
+      ],
+      "speedup": 11.858910906362405,
+      "reductionPercent": 91.56752244876473
+    },
+    {
+      "scenario": "build",
+      "description": "Unchanged production build with warm .next caches; includes route generation, checking, bundling, and prerendering",
+      "warmups": {
+        "tsc": {
+          "elapsedMs": 5107.207063000002,
+          "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 15ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 1358ms\n  Running TypeScript ...\n  Finished TypeScript in 2.6s ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 127ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+          "stderr": "",
+          "exitCode": 0
+        },
+        "tsc-rs": {
+          "elapsedMs": 1462.5554069999998,
+          "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 13ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 144ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 144ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+          "stderr": "",
+          "exitCode": 0
+        }
+      },
+      "executionOrder": [
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs",
+        "tsc-rs",
+        "tsc",
+        "tsc",
+        "tsc-rs"
+      ],
+      "compilers": [
+        {
+          "name": "tsc",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/node_modules/next/dist/bin/next",
+            "build"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 2264.1289469999974,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 14ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 139ms\n  Running TypeScript ...\n  Finished TypeScript in 1014ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 134ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2436.6612909999967,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 15ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 441ms\n  Running TypeScript ...\n  Finished TypeScript in 924ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 139ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2136.632918999996,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 13ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 132ms\n  Running TypeScript ...\n  Finished TypeScript in 939ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 137ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2142.705614000006,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 14ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 139ms\n  Running TypeScript ...\n  Finished TypeScript in 937ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 142ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2137.9278950000007,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 16ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 137ms\n  Running TypeScript ...\n  Finished TypeScript in 971ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 135ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2065.999014000001,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 15ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 138ms\n  Running TypeScript ...\n  Finished TypeScript in 925ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 136ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 2234.7377930000002,
+              "stdout": "▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 15ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 139ms\n  Running TypeScript ...\n  Finished TypeScript in 1035ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 136ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 2142.705614000006,
+          "minMs": 2065.999014000001,
+          "maxMs": 2436.6612909999967
+        },
+        {
+          "name": "tsc-rs",
+          "command": [
+            "/usr/bin/node",
+            "/home/crystl/.t3/projects/elytra/scripts/build.mjs"
+          ],
+          "samples": [
+            {
+              "elapsedMs": 1607.8867249999967,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 15ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 270ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 140ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1540.6852720000024,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 14ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 153ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 161ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1566.117456,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 16ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 147ms\n  Skipping validation of types\n  Finished TypeScript config validation in 3ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 137ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1488.2313930000018,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 14ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 150ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 144ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1494.4845950000017,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 16ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 134ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 141ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1505.196106000003,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 20ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 139ms\n  Skipping validation of types\n  Finished TypeScript config validation in 2ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 137ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            },
+            {
+              "elapsedMs": 1598.9559339999978,
+              "stdout": "Generating route types...\n✓ Types generated successfully\n▲ Next.js 16.4.0 (Turbopack)\n✓ Running next.config.ts took 16ms\n- Experiments (use with caution):\n  · serverActions\n\n  Creating an optimized production build ...\n✓ Compiled successfully in 163ms\n  Skipping validation of types\n  Finished TypeScript config validation in 3ms ...\n  Collecting page data using 15 workers ...\n  Generating static pages using 15 workers (0/16) ...\n  Generating static pages using 15 workers (4/16) \r\n  Generating static pages using 15 workers (8/16) \r\n  Generating static pages using 15 workers (12/16) \r\n✓ Generating static pages using 15 workers (16/16) in 158ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ƒ /\n├ ○ /_not-found\n├ ƒ /[username]\n├ ƒ /[username]/followers\n├ ƒ /[username]/following\n├ ƒ /[username]/likes\n├ ƒ /[username]/media\n├ ƒ /[username]/replies\n├ ƒ /[username]/status/[id]\n├ ƒ /api/mcp\n├ ƒ /api/media/[file]\n├ ƒ /api/oembed\n├ ƒ /api/v1/[[...path]]\n├ ƒ /bookmarks\n├ ƒ /explore\n├ ƒ /home\n├ ƒ /login\n├ ƒ /messages\n├ ƒ /messages/[id]\n├ ƒ /messages/new\n├ ƒ /notifications\n├ ƒ /settings\n├ ƒ /setup.md\n├ ƒ /signup\n├ ƒ /skill.md\n└ ƒ /welcome\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          ],
+          "medianMs": 1540.6852720000024,
+          "minMs": 1488.2313930000018,
+          "maxMs": 1607.8867249999967
+        }
+      ],
+      "speedup": 1.3907484240558137,
+      "reductionPercent": 28.09626941127722
+    }
+  ]
+}

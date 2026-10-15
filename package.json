@@ -5,7 +5,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
+    "typecheck": "next typegen && tsc-rs --noEmit --tsBuildInfoFile .next/cache/tsc-rs.tsbuildinfo",
+    "typecheck:tsc": "next typegen && tsc --noEmit --tsBuildInfoFile .next/cache/tsc.tsbuildinfo",
+    "bench:typecheck": "node scripts/bench-typecheck.mjs",
     "start": "next start",
     "lint": "eslint",
     "seed": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed.ts",
@@ -34,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
+    "tsc-rs": "0.7.0",
     "typescript": "^5"
   }
 }
