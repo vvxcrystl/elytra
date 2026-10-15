@@ -181,7 +181,6 @@ export function ProfileImageCropDialog({ source, kind, onApply, onCancel }: {
           }} className="btn-outline h-9 px-4 text-sm"><RotateCw className="size-4" />Rotate</button>
           <button type="button" onClick={reset} disabled={!naturalSize || busy} className="btn-outline h-9 px-4 text-sm"><RotateCcw className="size-4" />Reset</button>
         </div>
-        {source.file.type === "image/gif" && <p className="mt-4 text-center text-[13px] text-fg-muted">Animated images are saved as a still photo.</p>}
         {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
       </div>
     </dialog>

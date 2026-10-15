@@ -121,7 +121,7 @@ JSON bodies can be up to 64 KiB. Encrypted-message requests can be up to 128 KiB
 - `GET /timeline?tab=for-you|following` returns the authenticated home feed. For You uses the website's recommendation model. Following is chronological.
 - `GET /posts?q=...&tab=top|latest|media` searches public posts. `q` is required and has at most 500 characters. Searches for `#tag` and `@username` use indexed tags and mentions.
 - `POST /posts` creates a post. All fields are optional: `content` (280 characters), `replyToId`, `quoteId`, and `mediaIds` (up to four). A post needs content, images, or a quote.
-- `GET /posts/:id` returns a post with its author, images, optional quote or parent, counts, and the viewer's interaction flags.
+- `GET /posts/:id` returns a post with its author, images, optional quote or parent, counts, and the viewer's interaction flags. `viewCount` is the number of views for your own posts and null for everyone else's.
 - `DELETE /posts/:id` is for the author only. It removes the post's activity and images. Replies stay, and quotes of the post become tombstones.
 - `GET /posts/:id/thread` returns up to 100 ancestors, the target post, and up to 100 immediate replies. For a large conversation, page the replies separately.
 - `GET /posts/:id/replies` and `GET /posts/:id/quotes` return paginated related posts.
@@ -130,6 +130,8 @@ JSON bodies can be up to 64 KiB. Encrypted-message requests can be up to 128 KiB
 - `GET /bookmarks` returns your private bookmark feed.
 - `PUT /posts/:id/not-interested` dismisses a recommendation and updates your preference signals for that author.
 - `POST /impressions` with `{postIds: [...]}` records up to 100 seen posts. It deduplicates IDs and ignores removed posts.
+- `POST /posts/:id/visits` with `{kind: "detail" | "profile"}` records that you opened a post or went from it to its author's profile. Your own visits, repeats within a minute, and removed posts don't count.
+- `GET /posts/:id/analytics` is for the author only. It returns `impressions`, `engagements`, `detailExpands`, `profileVisits`, and the `replies`, `reposts`, `likes`, and `bookmarks` counts. Engagements are the sum of those four counts plus detail expands and profile visits. Impressions count signed-in viewers other than the author. Another account gets 403.
 - `GET /trends?limit=...` returns hashtag counts. It prefers the last seven days and falls back to all time.
 
 ## People and profiles

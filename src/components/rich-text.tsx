@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Fragment } from "react";
 
-// Keep hashtag boundaries and Unicode characters aligned with the post indexer.
-const HASHTAG_SOURCE = String.raw`(?<![\p{L}\p{N}_])#[\p{L}\p{N}_]+`;
+import { HASHTAG } from "@/lib/social-text";
 
-/** Matches a #hashtag anywhere in a string. */
-export const HASHTAG = new RegExp(HASHTAG_SOURCE, "gu");
+export { HASHTAG };
+const HASHTAG_SOURCE = HASHTAG.source;
 
 // Matches URLs, @mentions and #hashtags in one pass.
 const TOKEN = new RegExp(

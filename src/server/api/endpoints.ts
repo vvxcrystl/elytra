@@ -7,7 +7,7 @@ import { timeline } from "../data/timeline";
 import { usersPage, notificationsPage, markNotificationRead, relatedPostsPage, postUsersPage } from "../data/api";
 import { relationship, setSafety } from "../data/safety";
 import { createConversation, conversationById, conversationsFor, messagesFor, sendMessage, markConversationRead, deleteMessage, unreadMessageCount } from "../data/messages";
-import { saveImpressions, saveNotInterested } from "../data/feedback";
+import { saveImpressions, saveNotInterested, savePostVisit, postAnalytics } from "../data/feedback";
 import { createUpload, uploadById, type Upload } from "../data/uploads";
 import { removeImages } from "../media";
 import { transaction } from "../db";
@@ -153,6 +153,8 @@ const endpoints: Endpoint[] = [
   } }))),
   { method: "PUT", path: "/posts/:id/not-interested", summary: "Dismiss a recommended post", auth: true, response: "Success", handler(ctx) { post(ctx); saveNotInterested(requiredViewer(ctx).id, ctx.params.id); return data({ success: true }); } },
   { method: "POST", path: "/impressions", summary: "Record seen posts in a batch", auth: true, response: "Success", body: { postIds: { type: "array", required: true, maxItems: 100, items: idField } }, handler(ctx) { saveImpressions(requiredViewer(ctx).id, ctx.body.postIds as string[]); return data({ success: true }); } },
+  { method: "POST", path: "/posts/:id/visits", summary: "Record opening a post or going from it to its author's profile", auth: true, response: "Success", body: { kind: { type: "string", required: true, enum: ["detail", "profile"] } }, handler(ctx) { savePostVisit(requiredViewer(ctx).id, ctx.params.id, ctx.body.kind as "detail" | "profile"); return data({ success: true }); } },
+  { method: "GET", path: "/posts/:id/analytics", summary: "Read the view and engagement counts of your post", auth: true, response: "PostAnalytics", handler: ctx => data(postAnalytics(requiredViewer(ctx).id, ctx.params.id)) },
   { method: "GET", path: "/bookmarks", summary: "Read your private bookmarks", auth: true, response: "FeedItem", paged: true, handler(ctx) { const options = pageOptions(ctx); return page(timeline({ kind: "bookmarks" }, options.cursor, requiredViewer(ctx).id, { limit: options.limit, strictCursor: true })); } },
   { method: "GET", path: "/trends", summary: "Read trending hashtags", auth: false, response: "TrendArray", query: { limit: {} }, handler: ctx => data(trends(pageOptions(ctx).limit)) },
   { method: "GET", path: "/notifications", summary: "Read your notifications", auth: true, response: "Notification", paged: true, query: { filter: { enum: ["all", "mentions"] } }, handler: ctx => page(notificationsPage(requiredViewer(ctx).id, pageOptions(ctx), enumQuery(ctx, "filter", ["all", "mentions"], "all") === "mentions")) },

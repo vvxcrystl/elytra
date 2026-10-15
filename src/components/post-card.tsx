@@ -5,6 +5,7 @@ import { AiOperatedBadge } from "./ai-labels";
 import clsx from "clsx";
 import {
   Bookmark,
+  ChartNoAxesColumn,
   Heart,
   Link2,
   MessageCircle,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { compactNumber, fullTime } from "@/lib/format";
 import type { Post, UserSummary } from "@/lib/types";
 import {
@@ -30,10 +31,11 @@ import { Avatar } from "./avatar";
 import { useCompose } from "./compose-dialog";
 import { ImageGrid } from "./image-grid";
 import { Menu } from "./menu";
-import { setPostLiked } from "./post-api";
+import { PostAnalyticsDialog } from "./post-analytics-dialog";
+import { recordPostVisit, setPostLiked } from "./post-api";
 import { QuoteCard } from "./quote-card";
 import { RelativeTime } from "./relative-time";
-import { RichText } from "./rich-text";
+import { PostContent } from "./post-content";
 import { useToast } from "./toast";
 import { useOptionalViewer } from "./viewer-context";
 
@@ -79,6 +81,7 @@ export function PostCard({
   const [, startTransition] = useTransition();
   const [deleted, setDeleted] = useState(false);
   const likePending = useRef(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   // Local engagement state for instant feedback. Resets whenever the server sends a fresh post.
   const [engagement, setEngagement] = useState(() => engagementOf(post));
@@ -88,11 +91,22 @@ export function PostCard({
     setEngagement(engagementOf(post));
   }
 
+  const isOwn = post.author.id === viewer?.id;
+  const detail = variant === "detail";
+  const viewerId = viewer?.id;
+
+  // Opening a post counts as a detail expand. The server ignores the author and repeats within a minute.
+  useEffect(() => {
+    if (detail && viewerId && !isOwn) recordPostVisit(post.id, "detail");
+  }, [detail, viewerId, isOwn, post.id]);
+
   if (deleted) return null;
 
   const href = postHref(post);
-  const isOwn = post.author.id === viewer?.id;
-  const detail = variant === "detail";
+  // Counts a click from the post to its author's profile.
+  const onAuthorClick = () => {
+    if (viewerId && !isOwn) recordPostVisit(post.id, "profile");
+  };
 
   function onLike() {
     if (!viewer) return router.push("/login");
@@ -265,9 +279,15 @@ export function PostCard({
     </>
   );
 
+  const analyticsDialog = analyticsOpen && (
+    <PostAnalyticsDialog post={post} onClose={() => setAnalyticsOpen(false)} />
+  );
+
   const actions = (
     <ActionBar
       engagement={engagement}
+      viewCount={post.viewCount}
+      onAnalytics={() => setAnalyticsOpen(true)}
       detail={detail}
       onReply={() => viewer ? openCompose({ replyTo: post }) : router.push("/login")}
       onRepost={onRepost}
@@ -282,19 +302,20 @@ export function PostCard({
     return (
       <article data-post-id={post.id} className="border-b border-border px-4 pt-3">
         <div className="flex items-center gap-3">
-          <Link href={`/${post.author.username}`}>
+          <Link href={`/${post.author.username}`} onClick={onAuthorClick}>
             <Avatar user={post.author} />
           </Link>
           <div className="min-w-0 flex-1 text-[15px] leading-5">
             <Link
               href={`/${post.author.username}`}
+              onClick={onAuthorClick}
               className="block truncate font-bold hover:underline"
             >
               {post.author.displayName}
               <VerifiedBadge user={post.author} className="ml-1" />
               <AiOperatedBadge user={post.author} className="ml-1" />
             </Link>
-            <Link href={`/${post.author.username}`} className="block truncate text-fg-muted">
+            <Link href={`/${post.author.username}`} onClick={onAuthorClick} className="block truncate text-fg-muted">
               @{post.author.username}
             </Link>
           </div>
@@ -302,9 +323,7 @@ export function PostCard({
         </div>
         <div className="mt-3">{replyContext}</div>
         {post.content && (
-          <p className="mt-2 text-[17px] leading-6 break-words whitespace-pre-wrap">
-            <RichText text={post.content} />
-          </p>
+          <PostContent text={post.content} className="mt-2 text-[17px] leading-6" />
         )}
         {media}
         <p className="my-4 text-[15px] text-fg-muted">
@@ -313,6 +332,7 @@ export function PostCard({
           </time>
         </p>
         <div className="border-t border-border py-1">{actions}</div>
+        {analyticsDialog}
       </article>
     );
   }
@@ -339,7 +359,7 @@ export function PostCard({
       )}
       <div className="flex gap-3">
         <div className="flex flex-col items-center">
-          <Link href={`/${post.author.username}`} className="rounded-full">
+          <Link href={`/${post.author.username}`} onClick={onAuthorClick} className="rounded-full">
             <Avatar user={post.author} />
           </Link>
           {connectBelow && <div className="mt-1 w-0.5 flex-1 bg-border" />}
@@ -349,13 +369,14 @@ export function PostCard({
             <div className="flex min-w-0 flex-1 items-center gap-1 text-[15px] leading-5">
               <Link
                 href={`/${post.author.username}`}
+                onClick={onAuthorClick}
                 className="truncate font-bold hover:underline"
               >
                 {post.author.displayName}
               </Link>
               <VerifiedBadge user={post.author} />
               <AiOperatedBadge user={post.author} />
-              <Link href={`/${post.author.username}`} className="truncate text-fg-muted">
+              <Link href={`/${post.author.username}`} onClick={onAuthorClick} className="truncate text-fg-muted">
                 @{post.author.username}
               </Link>
               <span className="text-fg-muted" aria-hidden>
@@ -369,14 +390,13 @@ export function PostCard({
           </div>
           {replyContext}
           {post.content && (
-            <p className="mt-0.5 text-[15px] leading-5 break-words whitespace-pre-wrap">
-              <RichText text={post.content} />
-            </p>
+            <PostContent text={post.content} className="mt-0.5 text-[15px] leading-5" />
           )}
           {media}
           <div className="mt-1.5 mb-1">{actions}</div>
         </div>
       </div>
+      {analyticsDialog}
     </article>
   );
 }
@@ -388,6 +408,8 @@ export function PostCard({
  */
 function ActionBar({
   engagement,
+  viewCount,
+  onAnalytics,
   detail,
   onReply,
   onRepost,
@@ -397,6 +419,9 @@ function ActionBar({
   onShare,
 }: {
   engagement: Engagement;
+  /** Set only on the viewer's own posts, which also get an analytics button. */
+  viewCount: number | null;
+  onAnalytics: () => void;
   detail: boolean;
   onReply: () => void;
   onRepost: () => void;
@@ -448,6 +473,12 @@ function ActionBar({
       >
         <Heart className={clsx(icon, viewer.liked && "fill-current")} />
       </ActionButton>
+
+      {viewCount !== null && (
+        <ActionButton label="View post analytics" count={viewCount} onClick={onAnalytics} tone="accent">
+          <ChartNoAxesColumn className={icon} />
+        </ActionButton>
+      )}
 
       {/* Bookmark and share form one pair at the end, so they stay together at every width. */}
       <div className="flex items-center gap-1">

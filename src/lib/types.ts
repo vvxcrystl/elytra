@@ -65,6 +65,8 @@ export type Post = {
   repostCount: number;
   likeCount: number;
   bookmarkCount: number;
+  /** Times other people saw the post. Only set for the author's own posts, otherwise null. */
+  viewCount: number | null;
   viewer: {
     liked: boolean;
     reposted: boolean;

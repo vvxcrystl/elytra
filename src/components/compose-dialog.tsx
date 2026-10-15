@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { Post } from "@/lib/types";
 import { Avatar } from "./avatar";
+import { PostContent } from "./post-content";
 import { Composer } from "./composer";
 import { RelativeTime } from "./relative-time";
 
@@ -80,7 +81,7 @@ export function ComposeProvider({ children }: { children: React.ReactNode }) {
                         <RelativeTime iso={replyTo.createdAt} />
                       </span>
                     </div>
-                    <p className="text-[15px] break-words whitespace-pre-wrap">{replyTo.content}</p>
+                    <PostContent text={replyTo.content} className="text-[15px]" />
                     <p className="mt-3 text-[15px] text-fg-muted">
                       Replying to <span className="text-link">@{replyTo.author.username}</span>
                     </p>

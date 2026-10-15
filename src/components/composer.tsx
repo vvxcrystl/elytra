@@ -12,7 +12,7 @@ import {
 } from "@/lib/types";
 import { Avatar } from "./avatar";
 import { QuoteCard } from "./quote-card";
-import { HASHTAG } from "./rich-text";
+import { HASHTAG } from "@/lib/social-text";
 import { useToast } from "./toast";
 import { useViewer } from "./viewer-context";
 
@@ -44,6 +44,9 @@ export function Composer({
   const [expanded, setExpanded] = useState(!compact);
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  // dragenter/dragleave also fire for child elements, so count them.
+  const dragDepth = useRef(0);
 
   // Revoke preview URLs when attachments go away.
   const attachmentsRef = useRef(attachments);
@@ -65,11 +68,46 @@ export function Composer({
     setError(null);
     const room = POST_MAX_IMAGES - attachments.length;
     const picked = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (files.length > 0 && picked.length === 0) {
+      setError("Only images can be attached.");
+      return;
+    }
     if (picked.length > room) setError(`You can attach up to ${POST_MAX_IMAGES} images.`);
     setAttachments((prev) => [
       ...prev,
       ...picked.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) })),
     ]);
+  }
+
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
+  function onDragEnter(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    // Without this the browser refuses the drop.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    setExpanded(true);
+    addFiles(e.dataTransfer.files);
   }
 
   function removeAttachment(index: number) {
@@ -108,7 +146,21 @@ export function Composer({
   }
 
   return (
-    <div className="flex gap-3">
+    <div
+      className="relative flex gap-3"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragging && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -inset-2 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent-ink bg-accent-soft backdrop-blur-sm text-[15px] font-bold text-accent-ink"
+        >
+          Drop images to attach
+        </div>
+      )}
       <Avatar user={viewer} className="mt-1" />
       <div className="min-w-0 flex-1">
         {replyTo && expanded && compact && (

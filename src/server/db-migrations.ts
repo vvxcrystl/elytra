@@ -19,8 +19,22 @@ export function migrateBackend(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS post_stats (
       post_id TEXT PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
       likes INTEGER NOT NULL DEFAULT 0, reposts INTEGER NOT NULL DEFAULT 0,
-      bookmarks INTEGER NOT NULL DEFAULT 0, replies INTEGER NOT NULL DEFAULT 0
-    );`);
+      bookmarks INTEGER NOT NULL DEFAULT 0, replies INTEGER NOT NULL DEFAULT 0,
+      views INTEGER NOT NULL DEFAULT 0, detail_expands INTEGER NOT NULL DEFAULT 0, profile_visits INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS post_visits (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('detail','profile')),
+      last_at INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY(post_id,user_id,kind)
+    );
+    CREATE INDEX IF NOT EXISTS post_visits_user ON post_visits(user_id);`);
+  // Databases created before post analytics lack the view counters.
+  const statColumns = db.prepare("PRAGMA table_info(post_stats)").all().map(c => c.name);
+  for (const column of ["views", "detail_expands", "profile_visits"]) {
+    if (!statColumns.includes(column)) db.exec(`ALTER TABLE post_stats ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`);
+  }
   db.exec("BEGIN IMMEDIATE");
   try {
     if (!db.prepare("SELECT 1 FROM backend_migrations WHERE id='post_stats_v1'").get()) {
@@ -31,6 +45,12 @@ export function migrateBackend(db: DatabaseSync): void {
         LEFT JOIN (SELECT post_id,COUNT(*) n FROM bookmarks GROUP BY post_id) b ON b.post_id=p.id
         LEFT JOIN (SELECT reply_to_id,COUNT(*) n FROM posts WHERE reply_to_id IS NOT NULL GROUP BY reply_to_id) c ON c.reply_to_id=p.id;
         INSERT INTO backend_migrations VALUES('post_stats_v1');`);
+    }
+    // Views are the viewers' impressions, not counting the author's own.
+    if (!db.prepare("SELECT 1 FROM backend_migrations WHERE id='post_views_v1'").get()) {
+      db.exec(`UPDATE post_stats SET views=COALESCE((SELECT SUM(i.seen_count) FROM impressions i JOIN posts p ON p.id=i.post_id
+          WHERE i.post_id=post_stats.post_id AND i.user_id<>p.author_id),0);
+        INSERT INTO backend_migrations VALUES('post_views_v1');`);
     }
     db.exec(`CREATE TRIGGER IF NOT EXISTS post_stats_insert AFTER INSERT ON posts BEGIN
         INSERT INTO post_stats(post_id) VALUES(NEW.id);

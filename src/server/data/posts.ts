@@ -24,7 +24,7 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
   if (postIds.length) for (const image of all<{ post_id: string; url: string }>(`SELECT * FROM post_images WHERE post_id IN (${placeholders(postIds)}) ORDER BY position`, ...postIds)) {
     images.set(image.post_id, [...(images.get(image.post_id) || []), image.url]);
   }
-  const stats = new Map(all<{ post_id: string; likes: number; reposts: number; bookmarks: number; replies: number }>(`SELECT * FROM post_stats WHERE post_id IN (${placeholders(unique)})`, ...unique).map(r => [r.post_id, r]));
+  const stats = new Map(all<{ post_id: string; likes: number; reposts: number; bookmarks: number; replies: number; views: number }>(`SELECT * FROM post_stats WHERE post_id IN (${placeholders(unique)})`, ...unique).map(r => [r.post_id, r]));
   const mine = (table: "likes" | "reposts" | "bookmarks") => new Set(all<{ post_id: string }>(`SELECT post_id FROM ${table} WHERE user_id=? AND post_id IN (${placeholders(unique)})`, viewerId, ...unique).map(r => r.post_id));
   const likes = mine("likes"), reposts = mine("reposts"), bookmarks = mine("bookmarks");
   return new Map(posts.map(p => {
@@ -35,7 +35,7 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
         : { id: p.quote_id, author: { id: "", username: "", displayName: "Deleted post", avatarUrl: null, verified: false, aiOperated: false }, content: "", createdAt: new Date(0).toISOString(), imageUrls: [], deleted: true };
     }
     const parent = p.reply_to_id ? rowMap.get(p.reply_to_id) : null;
-    const post: Post = { id: p.id, author: authors.get(p.author_id)!, content: p.content, createdAt: new Date(p.created_at).toISOString(), imageUrls: images.get(p.id) || [], replyToId: p.reply_to_id, replyToUsername: parent ? authors.get(parent.author_id)?.username || null : null, quote, likeCount: stats.get(p.id)?.likes || 0, repostCount: stats.get(p.id)?.reposts || 0, bookmarkCount: stats.get(p.id)?.bookmarks || 0, replyCount: stats.get(p.id)?.replies || 0, viewer: { liked: likes.has(p.id), reposted: reposts.has(p.id), bookmarked: bookmarks.has(p.id) } };
+    const post: Post = { id: p.id, author: authors.get(p.author_id)!, content: p.content, createdAt: new Date(p.created_at).toISOString(), imageUrls: images.get(p.id) || [], replyToId: p.reply_to_id, replyToUsername: parent ? authors.get(parent.author_id)?.username || null : null, quote, likeCount: stats.get(p.id)?.likes || 0, repostCount: stats.get(p.id)?.reposts || 0, bookmarkCount: stats.get(p.id)?.bookmarks || 0, replyCount: stats.get(p.id)?.replies || 0, viewCount: p.author_id === viewerId ? stats.get(p.id)?.views || 0 : null, viewer: { liked: likes.has(p.id), reposted: reposts.has(p.id), bookmarked: bookmarks.has(p.id) } };
     return [p.id, post];
   }));
 }

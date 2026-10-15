@@ -37,6 +37,7 @@ Accounts and posting:
 
 - Sign up with a username and password. The session token lives in an httpOnly cookie, and the database stores only its SHA-256 hash.
 - Posts hold up to 280 characters and up to 4 images (PNG, JPEG, GIF, or WebP, 5 MB each). You can paste images into the composer.
+- Posts support Markdown formatting, including bold, italic, links, lists, quotes, and code.
 - You can reply, quote, repost, like, and bookmark. Replies appear on threaded detail pages.
 
 Reading and finding people:
@@ -68,6 +69,7 @@ Other:
 | `npm run bench:typecheck` | Compares full and cached checks; add `-- --build` to also measure production builds |
 | `npm start` | Runs the production server |
 | `npm run seed` | Wipes `data/elytra.db` and reseeds the demo data |
+| `npm run test:markdown` | Checks Markdown rendering, social links, and unsafe content |
 | `npm run test:backend` | Runs the data-layer integration checks against an in-memory database |
 | `npm run test:api` | Tests every REST operation and security boundary with isolated data and uploads |
 | `npm run test:e2ee` | Checks encryption, tamper rejection, key recovery, and plaintext erasure |

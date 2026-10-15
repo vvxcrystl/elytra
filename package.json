@@ -19,7 +19,8 @@
     "test:e2ee": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-e2ee.ts",
     "test:concurrency": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-concurrency.ts",
     "seed:load": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed-load.ts",
-    "load:api": "node scripts/load-api.mjs"
+    "load:api": "node scripts/load-api.mjs",
+    "test:markdown": "node scripts/test-post-markdown.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -27,10 +28,15 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "server-only": "^0.0.1"
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "server-only": "^0.0.1",
+    "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

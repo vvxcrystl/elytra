@@ -121,6 +121,11 @@ try {
     await request("DELETE", `/posts/${root}`, { token: alice, status: 403 });
     for (const tab of ["top", "latest", "media"]) await request("GET", `/posts?q=%23ApiTest&tab=${tab}`); await request("GET", "/posts", { status: 400 });
     await request("POST", "/impressions", { token: alice, json: { postIds: [root, root, "missing"] } }); await request("PUT", `/posts/${root}/not-interested`, { token: alice }); await request("GET", "/trends?limit=5");
+    await request("POST", `/posts/${root}/visits`, { token: alice, json: { kind: "detail" } }); await request("POST", `/posts/${root}/visits`, { token: alice, json: { kind: "profile" } });
+    await request("POST", `/posts/${root}/visits`, { token: alice, json: { kind: "other" }, status: 400 }); await request("POST", `/posts/${root}/visits`, { json: { kind: "detail" }, status: 401 });
+    assert.deepEqual((await request("GET", `/posts/${root}/analytics`, { token: bob })).data, { impressions: 1, engagements: 3, detailExpands: 1, profileVisits: 1, replies: 1, reposts: 0, likes: 0, bookmarks: 0 });
+    assert.equal((await request("GET", `/posts/${root}`, { token: bob })).data.viewCount, 1); assert.equal((await request("GET", `/posts/${root}`, { token: alice })).data.viewCount, null);
+    await request("GET", `/posts/${root}/analytics`, { token: alice, status: 403 }); await request("GET", `/posts/${root}/analytics`, { status: 401 });
   });
   await check("profiles, follows, people pagination, and notification read markers", async () => {
     await request("PATCH", "/users/me", { token: alice, json: { displayName: "Updated Alice", bio: "hello", location: "Regina", website: "example.com" } });

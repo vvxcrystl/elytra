@@ -1,3 +1,4 @@
+import { PostContent } from "./post-content";
 import clsx from "clsx";
 import Link from "next/link";
 import type { QuotedPost } from "@/lib/types";
@@ -30,9 +31,7 @@ export function QuoteCard({
         </span>
       </div>
       {quote.content && (
-        <p className="mt-1 text-[15px] leading-5 break-words whitespace-pre-wrap text-fg">
-          {quote.content}
-        </p>
+        <PostContent text={quote.content} interactive={false} className="mt-1 text-[15px] leading-5 text-fg" />
       )}
       {quote.imageUrls.length > 0 && (
         <div className="mt-2">
