@@ -10,6 +10,8 @@ import { getDb, transaction } from "../db";
 import { recommendedEntries } from "./recommendations";
 import { blockedIds, mutedIds } from "./safety";
 import { AppError } from "../errors";
+import { heldPostFilter } from "../moderation/policy";
+import { discoveryFilter } from "../moderation/worker";
 
 type Entry = { key: string; postId: string; reposterId: string | null };
 const empty = (): Page<FeedItem> => ({ items: [], nextCursor: null });
@@ -67,6 +69,7 @@ function candidates(source: TimelineSource, viewerId: string | null): Entry[] {
     args = [q];
     if (q.startsWith("#")) { filter = "EXISTS(SELECT 1 FROM hashtags h WHERE h.post_id=p.id AND h.tag=?)"; args = [q.slice(1)]; }
     if (q.startsWith("@")) { filter = "EXISTS(SELECT 1 FROM mentions m JOIN users u ON u.id=m.user_id WHERE m.post_id=p.id AND u.username_lower=?)"; args = [q.slice(1)]; }
+    filter += ` AND ${discoveryFilter()}`;
     if (source.tab === "media") filter += " AND EXISTS(SELECT 1 FROM post_images i WHERE i.post_id=p.id)";
     if (source.tab === "top") {
       const since = Date.now() - 30 * 86400000;
@@ -124,7 +127,8 @@ export function timeline(source: TimelineSource, cursor: string | null | undefin
     let position = offset;
     while (position < entries.length && selected.length < limit + 1) {
       const batch = entries.slice(position, position + 100), ids = [...new Set(batch.map(e => e.postId))];
-      const present = new Map(all<{ id: string; author_id: string }>(`SELECT id,author_id FROM posts WHERE id IN (${placeholders(ids)})`, ...ids).filter(r => !hiddenUsers.has(r.author_id)).map(r => [r.id, r.author_id]));
+      const discovery = source.kind === "search" || (source.kind === "home" && source.tab === "for-you");
+      const present = new Map(all<{ id: string; author_id: string }>(`SELECT p.id,p.author_id FROM posts p WHERE p.id IN (${placeholders(ids)}) AND ${heldPostFilter()} AND ${discovery ? discoveryFilter() : "1=1"}`, ...ids).filter(r => !hiddenUsers.has(r.author_id)).map(r => [r.id, r.author_id]));
       const reposts = new Set(all<{ key: string }>(`SELECT user_id || ':' || post_id AS key FROM reposts WHERE post_id IN (${placeholders(ids)})`, ...ids).map(r => r.key));
       const liked = source.kind === "user" && source.tab === "likes" ? new Set(all<{ post_id: string }>(`SELECT l.post_id FROM likes l JOIN users u ON u.id=l.user_id WHERE u.username_lower=? AND l.post_id IN (${placeholders(ids)})`, source.username.toLowerCase(), ...ids).map(r => r.post_id)) : null;
       const saved = source.kind === "bookmarks" ? new Set(all<{ post_id: string }>(`SELECT post_id FROM bookmarks WHERE user_id=? AND post_id IN (${placeholders(ids)})`, viewerId, ...ids).map(r => r.post_id)) : null;

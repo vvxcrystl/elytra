@@ -5,7 +5,7 @@ declare module "node:sqlite" {
   export class DatabaseSync {
     constructor(path: string);
     exec(sql: string): void;
-    function(name: string, options: { deterministic?: boolean }, fn: (...args: unknown[]) => string): void;
+    function(name: string, options: { deterministic?: boolean }, fn: (...args: unknown[]) => string | number): void;
     prepare(sql: string): {
       all(...params: SQLInputValue[]): SQLRow[];
       get(...params: SQLInputValue[]): SQLRow | undefined;

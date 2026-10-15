@@ -104,3 +104,10 @@ Elytra needs a Node server with writable, persistent storage. Cloudflare acts on
 - **403 on posts or uploads.** `ELYTRA_PUBLIC_ORIGIN` must match the browser URL exactly. After you fix it, run `docker compose up -d` to apply the change.
 - **Server Action host mismatch.** Clear any HTTP Host Header override on the tunnel route, or make your proxy forward the public hostname.
 - **Tunnel disconnected.** Check the token and the host's outbound connection to Cloudflare. The Cloudflare guide linked above lists the firewall requirements.
+
+## Optional local moderation sidecar
+
+The base deployment does not require a model server. To opt in, follow
+[MODERATION.md](MODERATION.md) for the extra Compose overlay, CPU/CUDA/ROCm/Vulkan
+profiles, read-only GGUF mount, loopback-only server port, and failure fallback.
+Include moderation audit/outbox tables in the existing database backup.

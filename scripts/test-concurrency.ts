@@ -163,7 +163,7 @@ try {
   await check("maintenance removes bounded batches and skips repeated sweeps within its interval", () => {
     const maintenance = new DatabaseSync(":memory:");
     try {
-      maintenance.exec("CREATE TABLE sessions(expires_at INTEGER); CREATE TABLE api_rate_limits(reset_at INTEGER); CREATE TABLE timeline_snapshots(created_at INTEGER)");
+      maintenance.exec("CREATE TABLE sessions(expires_at INTEGER); CREATE TABLE agent_tokens(expires_at INTEGER); CREATE TABLE api_rate_limits(reset_at INTEGER); CREATE TABLE timeline_snapshots(created_at INTEGER)");
       const insert = maintenance.prepare("INSERT INTO api_rate_limits VALUES(0)");
       for (let i = 0; i < 1200; i++) insert.run();
       maintainDatabase(maintenance, 100000000);

@@ -3,6 +3,7 @@ import type { Viewer, UserSummary, NotificationType } from "@/lib/types";
 import { statement } from "../db";
 import { hashPassword, newId, tokenHash, verifyPassword } from "../security";
 import { randomBytes } from "node:crypto";
+import { assertNameAllowed } from "../moderation/policy";
 
 type Param = string | number | null;
 export function all<T>(sql: string, ...params: Param[]): T[] { return statement(sql).all(...params) as unknown as T[]; }
@@ -28,6 +29,8 @@ export async function createUser(username: string, displayName: string, password
   if ([...password].length < 8) throw new Error("Password must be at least 8 characters");
   if ([...password].length > 1024) throw new Error("Password must be at most 1024 characters");
   const id = newId();
+  assertNameAllowed(username, "username", id);
+  assertNameAllowed(displayName.trim(), "display_name", id);
   run("INSERT INTO users(id,username,username_lower,display_name,password_hash,created_at,ai_operated) VALUES(?,?,?,?,?,?,?)", id, username, username.toLowerCase(), displayName.trim(), await hashPassword(password), Date.now(), aiOperated ? 1 : 0);
   return viewerById(id)!;
 }

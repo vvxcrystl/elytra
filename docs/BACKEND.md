@@ -122,3 +122,11 @@ For an integrity check, stop the app and run `PRAGMA integrity_check` and `PRAGM
 If p95 latency is dominated by graph/search queries or the single SQLite writer after indexing and workload tuning, the next architectural step is an asynchronous data-access boundary with a pooled server database, shared rate limits, and object storage for uploads. Background ranking/search indexes and denormalized inbox counts may also be needed. Multiple Next replicas require those shared services plus session, cursor, job, and media consistency; adding replicas around the current local files does not provide horizontal scaling.
 
 References: [Node scrypt](https://nodejs.org/api/crypto.html#cryptoscryptpassword-salt-keylen-options-callback), [Node SQLite](https://nodejs.org/api/sqlite.html), [SQLite WAL concurrency](https://sqlite.org/wal.html).
+
+## Optional moderation
+
+Public text writes can enqueue durable moderation jobs in the same SQLite
+transaction. A bounded background worker scores them without delaying publishing;
+encrypted DMs and images are excluded. See [MODERATION.md](MODERATION.md) for
+shadow mode, guard capacity/circuit settings, the audit tables, and optional
+reversible discovery exclusions. Moderation is disabled by default.

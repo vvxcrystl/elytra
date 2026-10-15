@@ -1,8 +1,8 @@
 "use client";
 
 import clsx from "clsx";
-import { ImageIcon, X } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Ban, CircleAlert, ImageIcon, LoaderCircle, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { createPost } from "@/server/actions";
 import {
   POST_MAX_IMAGES,
@@ -44,6 +44,8 @@ export function Composer({
   const [expanded, setExpanded] = useState(!compact);
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const errorId = useId();
   const [dragging, setDragging] = useState(false);
   // dragenter/dragleave also fire for child elements, so count them.
   const dragDepth = useRef(0);
@@ -62,9 +64,10 @@ export function Composer({
   const remaining = POST_MAX_LENGTH - length;
   const hasContent = text.trim().length > 0 || attachments.length > 0 || !!quote;
   const canSubmit = hasContent && remaining >= 0 && !pending;
+  const failure = error ? sendFailure(error) : null;
 
   function addFiles(files: FileList | null) {
-    if (!files) return;
+    if (!files || pending) return;
     setError(null);
     const room = POST_MAX_IMAGES - attachments.length;
     const picked = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -124,11 +127,18 @@ export function Composer({
     if (replyTo) form.set("replyToId", replyTo.id);
     if (quote) form.set("quoteId", quote.id);
     attachments.forEach((a) => form.append("images", a.file));
+    // A stale "not sent" notice next to "Posting…" reads as if the retry failed too.
+    setError(null);
 
     startTransition(async () => {
       const result = await createPost(form);
       if (!result.ok) {
         setError(result.error);
+        // Clicking the send button disables it, which drops focus to the page.
+        const active = document.activeElement;
+        if (!active || active === document.body || (active as HTMLButtonElement).disabled) {
+          textareaRef.current?.focus({ preventScroll: true });
+        }
         return;
       }
       attachments.forEach((a) => URL.revokeObjectURL(a.url));
@@ -173,7 +183,11 @@ export function Composer({
           <div className="relative min-h-[52px] min-w-0 flex-1">
             <HighlightedText text={text} />
             <textarea
+              ref={textareaRef}
               value={text}
+              readOnly={pending}
+              aria-invalid={failure === "blocked" || undefined}
+              aria-describedby={error ? errorId : undefined}
               onChange={(e) => setText(e.target.value)}
               onFocus={() => setExpanded(true)}
               onKeyDown={(e) => {
@@ -223,8 +237,9 @@ export function Composer({
                 <button
                   type="button"
                   onClick={() => removeAttachment(i)}
+                  disabled={pending}
                   aria-label="Remove image"
-                  className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur hover:bg-black/80"
+                  className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur hover:bg-black/80 disabled:opacity-50"
                 >
                   <X className="size-4" />
                 </button>
@@ -239,7 +254,20 @@ export function Composer({
           </div>
         )}
 
-        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+        {error &&
+          (failure ? (
+            <SendFailure
+              id={errorId}
+              kind={failure}
+              message={error}
+              noun={replyTo ? "reply" : "post"}
+              onRetry={submit}
+            />
+          ) : (
+            <p id={errorId} role="alert" className="mb-2 text-sm text-danger">
+              {error}
+            </p>
+          ))}
 
         {expanded && (
           <div className="flex items-center justify-between border-t border-border pt-2 pb-1">
@@ -258,7 +286,7 @@ export function Composer({
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                disabled={attachments.length >= POST_MAX_IMAGES}
+                disabled={pending || attachments.length >= POST_MAX_IMAGES}
                 aria-label="Add images"
                 title="Add images"
                 className="flex size-9 items-center justify-center rounded-full text-accent-ink transition-colors hover:bg-accent-soft disabled:opacity-40 disabled:hover:bg-transparent"
@@ -272,12 +300,74 @@ export function Composer({
                 type="button"
                 onClick={submit}
                 disabled={!canSubmit}
+                aria-busy={pending || undefined}
                 className="btn-primary h-9 px-4 text-[15px]"
               >
-                {pending ? "Posting…" : (submitLabel ?? (replyTo ? "Reply" : "Post"))}
+                {pending ? (
+                  <>
+                    <LoaderCircle className="-ml-0.5 size-4 motion-safe:animate-spin" aria-hidden />
+                    {replyTo ? "Replying…" : "Posting…"}
+                  </>
+                ) : (
+                  (submitLabel ?? (replyTo ? "Reply" : "Post"))
+                )}
               </button>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type SendFailureKind = "blocked" | "retry";
+
+/** Picks out createPost errors that mean the draft was refused or should simply be sent again. */
+function sendFailure(error: string): SendFailureKind | null {
+  if (/isn't allowed/i.test(error)) return "blocked";
+  if (/temporarily unavailable|try again (shortly|later)/i.test(error)) return "retry";
+  return null;
+}
+
+function SendFailure({
+  id,
+  kind,
+  message,
+  noun,
+  onRetry,
+}: {
+  id: string;
+  kind: SendFailureKind;
+  message: string;
+  noun: "post" | "reply";
+  onRetry: () => void;
+}) {
+  const blocked = kind === "blocked";
+  const Icon = blocked ? Ban : CircleAlert;
+  return (
+    <div
+      className={clsx(
+        "mb-3 flex gap-3 rounded-2xl border px-3 py-2.5",
+        blocked ? "border-danger/35 bg-danger/8" : "border-border bg-bg-muted",
+      )}
+    >
+      <Icon
+        className={clsx("mt-0.5 size-5 shrink-0", blocked ? "text-danger" : "text-fg-muted")}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div id={id} role="alert">
+          <p className="text-[15px] leading-5 font-bold">{`Your ${noun} wasn't sent`}</p>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            {blocked
+              ? `${message.replace(/\.?$/, ".")} Edit your ${noun} and try again.`
+              : "We couldn't finish sending it. Your draft is still here, so try again in a moment."}
+          </p>
+        </div>
+        {!blocked && (
+          <button type="button" onClick={onRetry} className="btn-outline mt-2 h-8 px-3 text-sm">
+            Try again
+          </button>
         )}
       </div>
     </div>

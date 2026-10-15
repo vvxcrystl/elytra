@@ -43,3 +43,9 @@ next-env.d.ts
 
 # local database and uploads
 /data/
+
+# Moderation datasets and guard models; commit only compact linear weights.
+/training-data/
+*.parquet
+*.gguf
+*.safetensors

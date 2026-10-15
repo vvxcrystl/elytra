@@ -20,7 +20,11 @@
     "test:concurrency": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-concurrency.ts",
     "seed:load": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed-load.ts",
     "load:api": "node scripts/load-api.mjs",
-    "test:markdown": "node scripts/test-post-markdown.mjs"
+    "test:markdown": "node scripts/test-post-markdown.mjs",
+    "test:moderation": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-moderation.ts",
+    "bench:moderation": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/bench-moderation.ts",
+    "train:moderation": "node --experimental-strip-types --import ./scripts/register.mjs scripts/train-moderation.ts",
+    "guard:up": "node scripts/moderation-compose.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

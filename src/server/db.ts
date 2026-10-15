@@ -13,6 +13,7 @@ const globalDb = globalThis as typeof globalThis & { elytraDb?: DatabaseSync };
 const configured = new WeakSet<DatabaseSync>();
 function initializeDatabase(db: DatabaseSync): void {
   db.function("unicode_lower", { deterministic: true }, value => String(value ?? "").toLowerCase());
+  db.function("moderation_enabled", {}, () => process.env.ELYTRA_MODERATION === "true" ? 1 : 0);
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = FULL;

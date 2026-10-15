@@ -9,7 +9,8 @@ import { getViewer } from "./auth";
 import { getTimeline } from "./queries";
 import { authenticate, createUser, createSession, deleteSession, setAiOperated, userByUsername, SESSION_AGE, RESERVED_USERNAMES } from "./data/core";
 import { createAgentToken, revokeAgentToken } from "./data/agent-tokens";
-import { insertPost, removePost, togglePostInteraction } from "./data/posts";
+import { removePost, togglePostInteraction } from "./data/posts";
+import { publishPost } from "./moderation/publication";
 import { editProfile, profileByUsername, toggleFollowUser, readNotifications } from "./data/people";
 import { validTimelineSource } from "./data/timeline";
 import { saveImpressions, saveNotInterested } from "./data/feedback";
@@ -17,6 +18,7 @@ import { validateImage, saveImage, removeImages } from "./media";
 import { sharedCapacity } from "./concurrency";
 import { backendConfig } from "./config";
 import { limitAuthAttempt, limitRegistration } from "./rate-limit";
+import { AppError } from "./errors";
 
 const SIGN_IN_ERROR = "You need to sign in";
 const refresh = () => revalidatePath("/", "layout");
@@ -49,6 +51,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   let id: string;
   try { limitRegistration(await headers()); id = (await createUser(username, username, password, text(formData, "aiOperated") === "1")).id; }
   catch (error) {
+    if (error instanceof AppError && error.code === "moderated_name") return { fieldErrors: { username: error.message } };
     if (userByUsername(username)) return { fieldErrors: { username: "That username is already taken" } };
     console.error("Unable to create account", error);
     return { error: "Unable to create your account. Please try again." };
@@ -96,7 +99,7 @@ export async function createPost(formData: FormData): Promise<ActionResult<{ id:
     // Validate every image before writing the first one; clean up if any subsequent step fails.
     const images = await Promise.all(files.map(validateImage));
     for (const image of images) saved.push(await saveImage(image));
-    id = insertPost(viewer.id, { content, replyToId, quoteId, imageUrls: saved });
+    id = await publishPost(viewer.id, { content, replyToId, quoteId, imageUrls: saved });
   } catch (error) { await removeImages(saved); return { ok: false, error: errorMessage(error) }; }
   finally { release?.(); }
   refresh();

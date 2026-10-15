@@ -68,13 +68,13 @@ export function AgentTokens({ initial }: { initial: AgentToken[] }) {
           required
           placeholder="Name, such as my agent"
           aria-label="Token name"
-          className="input h-9 min-w-0 flex-1 basis-40"
+          className="input h-9 min-w-0 flex-1 basis-40 py-0!"
         />
         <select
           value={days ?? ""}
           onChange={(e) => setDays(e.target.value === "" ? null : Number(e.target.value))}
           aria-label="Expiry"
-          className="input h-9 w-auto"
+          className="input h-9 w-auto py-0!"
         >
           {EXPIRY.map((option) => (
             <option key={option.label} value={option.days ?? ""}>{option.label}</option>

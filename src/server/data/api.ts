@@ -4,6 +4,7 @@ import { all, one, run, summary, placeholders, type UserRow } from "./core";
 import { listUsers, visibleNotificationSql } from "./people";
 import { hydratePosts } from "./posts";
 import { AppError } from "../errors";
+import { heldPostFilter } from "../moderation/policy";
 import { decodeCursor, encodeCursor, type PageOptions } from "./pagination";
 
 const visibleUserSql = `NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=u.id) OR (b.user_id=u.id AND b.target_id=?))`;
@@ -45,7 +46,7 @@ export function markNotificationRead(viewerId: string, id: string): void {
 }
 export function relatedPostsPage(postId: string, viewerId: string | null, kind: "replies" | "quotes", options: PageOptions): Page<Post> {
   const scope = `${kind}:${viewerId}:${postId}`, key = decodeCursor(options.cursor, scope, ["number", "string"]);
-  const rows = all<{ id: string; created_at: number }>(`SELECT p.id,p.created_at FROM posts p WHERE ${kind === "replies" ? "reply_to_id" : "quote_id"}=?
+  const rows = all<{ id: string; created_at: number }>(`SELECT p.id,p.created_at FROM posts p WHERE ${kind === "replies" ? "reply_to_id" : "quote_id"}=? AND ${heldPostFilter()}
     AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=p.author_id) OR (b.user_id=p.author_id AND b.target_id=?))
     ${key ? "AND (created_at<? OR (created_at=? AND id<?))" : ""} ORDER BY created_at DESC,id DESC LIMIT ?`, postId, viewerId, viewerId, ...(key ? [key[0], key[0], key[1]] : []), options.limit + 1);
   const selected = rows.slice(0, options.limit), last = selected.at(-1), posts = hydratePosts(selected.map(r => r.id), viewerId);

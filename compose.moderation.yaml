@@ -1,0 +1,66 @@
+# Optional overlay. Activate exactly one moderation-* profile; see docs/MODERATION.md.
+x-guard: &guard
+  restart: unless-stopped
+  init: true
+  volumes:
+    - ${ELYTRA_GUARD_MODELS_DIR:-./data/moderation-models}:/models:ro
+  ports:
+    - "127.0.0.1:8081:8081"
+  networks:
+    default:
+      aliases: [guard]
+  # One slot preserves the fixed policy prefix with cache_prompt=true requests.
+  command:
+    ["--model", "/models/qwen3guard-q8_0.gguf", "--host", "0.0.0.0", "--port", "8081",
+     "--ctx-size", "4096", "--parallel", "1", "--threads", "4", "--threads-batch", "4",
+     "--gpu-layers", "99", "--cache-ram", "64", "--no-webui"]
+
+services:
+  app:
+    environment:
+      ELYTRA_MODERATION: ${ELYTRA_MODERATION:-false}
+      ELYTRA_MODERATION_ESCALATION: ${ELYTRA_MODERATION_ESCALATION:-borderline}
+      ELYTRA_MODERATION_ENFORCEMENT: ${ELYTRA_MODERATION_ENFORCEMENT:-off}
+      ELYTRA_MODERATION_PUBLISH: ${ELYTRA_MODERATION_PUBLISH:-off}
+      ELYTRA_SLUR_ACTION: ${ELYTRA_SLUR_ACTION:-shadow}
+      ELYTRA_SLUR_NAMES: ${ELYTRA_SLUR_NAMES:-reject}
+      ELYTRA_MODERATION_LOW: ${ELYTRA_MODERATION_LOW:-0.2}
+      ELYTRA_MODERATION_HIGH: ${ELYTRA_MODERATION_HIGH:-0.8}
+      ELYTRA_MODERATION_ENFORCE_MIN: ${ELYTRA_MODERATION_ENFORCE_MIN:-0.95}
+      ELYTRA_MODERATION_WEIGHTS: ${ELYTRA_MODERATION_WEIGHTS:-/app/models/moderation/linear.json}
+      ELYTRA_GUARD_URL: http://guard:8081
+      ELYTRA_GUARD_BACKEND: ${ELYTRA_GUARD_BACKEND:-cpu}
+      ELYTRA_GUARD_VERSION: ${ELYTRA_GUARD_VERSION:-Qwen3Guard-Gen-0.6B:fada3b2:Q8_0}
+      ELYTRA_GUARD_TIMEOUT_MS: ${ELYTRA_GUARD_TIMEOUT_MS:-5000}
+      ELYTRA_GUARD_QUEUE: ${ELYTRA_GUARD_QUEUE:-16}
+      ELYTRA_GUARD_FAILURES: ${ELYTRA_GUARD_FAILURES:-3}
+      ELYTRA_GUARD_COOLDOWN_MS: ${ELYTRA_GUARD_COOLDOWN_MS:-30000}
+
+  guard-cpu:
+    <<: *guard
+    profiles: [moderation-cpu]
+    image: ${ELYTRA_GUARD_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    command:
+      ["--model", "/models/qwen3guard-q8_0.gguf", "--host", "0.0.0.0", "--port", "8081",
+       "--ctx-size", "4096", "--parallel", "1", "--threads", "4", "--threads-batch", "4",
+       "--gpu-layers", "0", "--cache-ram", "64", "--no-webui"]
+
+  guard-cuda:
+    <<: *guard
+    profiles: [moderation-cuda]
+    image: ${ELYTRA_GUARD_CUDA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    gpus: all
+
+  guard-rocm:
+    <<: *guard
+    profiles: [moderation-rocm]
+    image: ${ELYTRA_GUARD_ROCM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-rocm}
+    devices: ["/dev/kfd:/dev/kfd", "/dev/dri:/dev/dri"]
+    group_add: ["${ELYTRA_RENDER_GID:-109}", "${ELYTRA_VIDEO_GID:-44}"]
+
+  guard-vulkan:
+    <<: *guard
+    profiles: [moderation-vulkan]
+    image: ${ELYTRA_GUARD_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan}
+    devices: ["/dev/dri:/dev/dri"]
+    group_add: ["${ELYTRA_RENDER_GID:-109}", "${ELYTRA_VIDEO_GID:-44}"]

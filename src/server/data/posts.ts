@@ -7,15 +7,16 @@ import { transaction } from "../db";
 import { newId } from "../security";
 import { assertCanInteract, blockedIds } from "./safety";
 import { claimUpload } from "./uploads";
+import { assertDirectedPostAllowed, heldPostFilter } from "../moderation/policy";
 
 type PostRow = { id: string; author_id: string; content: string; reply_to_id: string | null; quote_id: string | null; created_at: number };
 export function hydratePosts(ids: string[], viewerId: string | null): Map<string, Post> {
   const unique = [...new Set(ids)];
   if (!unique.length) return new Map();
   const blocked = blockedIds(viewerId);
-  const posts = all<PostRow>(`SELECT * FROM posts WHERE id IN (${placeholders(unique)})`, ...unique).filter(p => !blocked.has(p.author_id));
+  const posts = all<PostRow>(`SELECT p.* FROM posts p WHERE id IN (${placeholders(unique)}) AND ${heldPostFilter()}`, ...unique).filter(p => !blocked.has(p.author_id));
   const related = [...new Set(posts.flatMap(p => [p.quote_id, p.reply_to_id].filter((id): id is string => !!id)))];
-  const extra = related.length ? all<PostRow>(`SELECT * FROM posts WHERE id IN (${placeholders(related)})`, ...related).filter(p => !blocked.has(p.author_id)) : [];
+  const extra = related.length ? all<PostRow>(`SELECT p.* FROM posts p WHERE id IN (${placeholders(related)}) AND ${heldPostFilter()}`, ...related).filter(p => !blocked.has(p.author_id)) : [];
   const rowMap = new Map([...posts, ...extra].map(p => [p.id, p]));
   const allRows = [...rowMap.values()], postIds = [...rowMap.keys()];
   const authorIds = [...new Set(allRows.map(p => p.author_id))];
@@ -41,7 +42,7 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
 }
 export const postById = (id: string, viewerId: string | null) => hydratePosts([id], viewerId).get(id) || null;
 export function postThread(id: string, viewerId: string | null): PostThread | null {
-  const target = one<PostRow>("SELECT * FROM posts WHERE id=?", id);
+  const target = one<PostRow>(`SELECT p.* FROM posts p WHERE id=? AND ${heldPostFilter()}`, id);
   if (!target || blockedIds(viewerId).has(target.author_id)) return null;
   // The recursive query stops at deleted parents and guards against corrupt cycles.
   const ancestors = all<{ id: string; depth: number }>(`WITH RECURSIVE chain(id,reply_to_id,depth,path) AS (
@@ -49,7 +50,7 @@ export function postThread(id: string, viewerId: string | null): PostThread | nu
     UNION ALL SELECT p.id,p.reply_to_id,c.depth+1,c.path || p.id || ',' FROM posts p JOIN chain c ON p.id=c.reply_to_id
     WHERE instr(c.path,',' || p.id || ',')=0 AND c.depth<100
   ) SELECT id,depth FROM chain WHERE depth>0 ORDER BY depth DESC`, id);
-  const replies = all<{ id: string }>(`SELECT p.id FROM posts p WHERE reply_to_id=? ORDER BY (author_id=?) DESC,
+  const replies = all<{ id: string }>(`SELECT p.id FROM posts p WHERE reply_to_id=? AND ${heldPostFilter()} ORDER BY (author_id=?) DESC,
     (SELECT likes FROM post_stats s WHERE s.post_id=p.id) DESC, created_at ASC, id ASC LIMIT 100`, id, target.author_id);
   const hydrated = hydratePosts([id, ...ancestors.map(p => p.id), ...replies.map(p => p.id)], viewerId);
   const visible = (rows: { id: string }[]) => rows.flatMap(p => hydrated.has(p.id) ? [hydrated.get(p.id)!] : []);
@@ -62,6 +63,7 @@ export function insertPost(viewerId: string, input: NewPost): string {
   if (!content && !imageUrls.length && !input.mediaIds?.length && !input.quoteId) throw new Error("Write something or add an image");
   if ((input.mediaIds?.length ?? 0) + imageUrls.length > POST_MAX_IMAGES || new Set(input.mediaIds).size !== (input.mediaIds?.length ?? 0)) throw new Error("Invalid images");
   if (imageUrls.length > POST_MAX_IMAGES || imageUrls.some(url => !/^\/api\/media\/[A-Za-z0-9_-]+\.(png|jpg|gif|webp)$/.test(url))) throw new Error("Invalid images");
+  assertDirectedPostAllowed(viewerId, content, input.replyToId);
   return transaction(() => {
     const urls = [...imageUrls, ...(input.mediaIds ?? []).map(id => claimUpload(viewerId, id, "post"))];
     const reply = input.replyToId ? one<PostRow>("SELECT * FROM posts WHERE id=?", input.replyToId) : null;

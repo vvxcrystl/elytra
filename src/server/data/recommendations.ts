@@ -1,6 +1,7 @@
 import "server-only";
 import { all, placeholders } from "./core";
 import { backendConfig } from "../config";
+import { discoveryFilter } from "../moderation/worker";
 
 const DAY = 86400000;
 const POOL = 150;
@@ -69,7 +70,7 @@ function rankCandidates(viewerId: string | null, now: number, includeSeen: boole
     GROUP BY f.followee_id ORDER BY n DESC,f.followee_id LIMIT 150`, viewerId).map(r => [r.author_id, r.n]));
   const authorSimilarity = (id: string) => Math.min(1, (relationships.get(id) || 0) * 0.8 + Math.min(0.8, (neighbors.get(id) || 0) * 0.2));
   // Apply exclusions before source caps so seen/hidden posts cannot starve a pool.
-  const eligible = `p.created_at>=${since} AND p.author_id IS NOT ?
+  const eligible = `${discoveryFilter()} AND p.created_at>=${since} AND p.author_id IS NOT ?
     AND (${includeSeen ? 1 : 0}=1 OR NOT EXISTS(SELECT 1 FROM impressions i WHERE i.user_id=? AND i.post_id=p.id AND i.last_seen_at>=${now - DAY}))
     AND NOT EXISTS(SELECT 1 FROM negative_feedback n WHERE n.user_id=? AND n.post_id=p.id)`;
   const viewerArgs = [viewerId, viewerId, viewerId];

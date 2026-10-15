@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-15T06:51:15.097Z",
+  "machine": {
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v26.10.0"
+  },
+  "lexiconVersion": "en-slurs-v1",
+  "weightsVersion": "civil-comments-70ac62c5ed56-e3-d32768-neutral-v1-elytra-ngram-v2-cc289abf",
+  "guardVersion": "QuantFactory/Qwen3Guard-Gen-0.6B:be4e562:Q8_0:a5108bc2",
+  "guardBackend": "cpu",
+  "textLengths": [
+    43,
+    48,
+    50,
+    32,
+    32,
+    22,
+    47,
+    280,
+    7,
+    16,
+    12,
+    21,
+    12,
+    21
+  ],
+  "tier0": {
+    "items": 20000,
+    "meanMs": 0.011916417150000061,
+    "p50Ms": 0.0075539999999989504,
+    "p95Ms": 0.03802200000001221,
+    "throughputPerSecond": 83483.74843783645
+  },
+  "linear": {
+    "items": 20000,
+    "meanMs": 0.014193087049999716,
+    "p50Ms": 0.011220999999977721,
+    "p95Ms": 0.04758100000003651,
+    "throughputPerSecond": 70188.0655526211
+  },
+  "guard": {
+    "items": 28,
+    "meanMs": 414.89965514285717,
+    "p50Ms": 456.3917309999997,
+    "p95Ms": 511.1683759999996,
+    "throughputPerSecond": 2.410130441928488,
+    "statuses": {
+      "ok": 28
+    },
+    "verdicts": {
+      "Safe": 10,
+      "Controversial": 2,
+      "Unsafe": 16
+    },
+    "firstRequestMs": 766.588515
+  },
+  "note": "Warm sequential inference, normalization included. Linear consumes precomputed tier 0 hits; excludes SQLite and 250 ms outbox polling. Guard includes localhost HTTP, fixed-prefix cache enabled. Throughput includes unknown responses; inspect statuses."
+}

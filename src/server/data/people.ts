@@ -6,6 +6,8 @@ import { transaction } from "../db";
 import { hydratePosts } from "./posts";
 import { assertCanInteract, blockedIds } from "./safety";
 import { claimUpload } from "./uploads";
+import { assertNameAllowed } from "../moderation/policy";
+import { discoveryFilter } from "../moderation/worker";
 
 export function listUsers(rows: UserRow[], viewerId: string | null): UserListItem[] {
   const ids = rows.map(u => u.id);
@@ -60,6 +62,7 @@ export function toggleFollowUser(viewerId: string, userId: string, desired?: boo
 }
 export type ProfileUpdate = { displayName: string; bio: string; location: string; website: string; avatarUrl?: string | null; bannerUrl?: string | null; avatarMediaId?: string; bannerMediaId?: string };
 export function editProfile(viewerId: string, update: ProfileUpdate): string[] {
+  assertNameAllowed(update.displayName, "display_name", viewerId);
   return transaction(() => {
     const user = one<UserRow>("SELECT * FROM users WHERE id=?", viewerId);
     if (!user) throw new Error("User not found");
@@ -73,7 +76,7 @@ export function trends(limit: number): Trend[] {
   const since = Date.now() - 7 * 86400000;
   return all<{ tag: string; postCount: number }>(`SELECT h.tag,COUNT(DISTINCT p.id) AS postCount
     FROM hashtags h JOIN posts p ON p.id=h.post_id
-    WHERE p.created_at>=?
+    WHERE p.created_at>=? AND ${discoveryFilter()}
     GROUP BY h.tag
     ORDER BY postCount DESC,MAX(p.created_at) DESC,h.tag
     LIMIT ?`, since, Math.max(0, Math.min(100, Math.floor(limit) || 0)));

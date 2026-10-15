@@ -31,6 +31,10 @@ Then point the tunnel's published hostname at `http://app:3000`. The database an
 
 The backend uses bounded asynchronous password work, request/upload admission limits, indexed SQLite queries with transaction-maintained engagement counters, capped feed snapshots, batched messaging reads, and streamed media. See the [backend operations guide](docs/BACKEND.md) for concurrency budgets, proxy setup, migrations, health checks, load testing, and the single-host scaling limits.
 
+Optional [text moderation](docs/MODERATION.md) adds a local slur matcher, a tiny n-gram classifier and a Qwen3Guard sidecar with CPU, CUDA, ROCm, or Vulkan profiles. It is off by default; enabling it records scores in shadow mode unless the operator enables reversible review holds or discovery exclusions. With moderation enabled, high-severity names are rejected by default; ambiguous/reclaimed names remain allowed. Encrypted DMs and images are excluded.
+
+Set `ELYTRA_MODERATION_PUBLISH=block` to check every post before publishing and show a composer error for unsafe content. Failed checks keep the draft unpublished for retry. See the moderation guide for setup.
+
 ## Features
 
 Accounts and posting:
@@ -74,6 +78,10 @@ Other:
 | `npm run test:api` | Tests every REST operation and security boundary with isolated data and uploads |
 | `npm run test:e2ee` | Checks encryption, tamper rejection, key recovery, and plaintext erasure |
 | `npm run test:concurrency` | Tests overload recovery, body deadlines, concurrent writes, retention, and streaming with isolated files |
+| `npm run test:moderation` | Tests slur matching/spans, name policy, scoring, guard failures, durable jobs, and reversible actions |
+| `npm run bench:moderation` | Measures local slur, linear, and guard latency/throughput; reports an unavailable guard explicitly |
+| `npm run train:moderation -- /path/to/civil-comments.jsonl` | Retrains compact int8 weights from public CC0 toxicity data |
+| `npm run guard:up` | Starts the optional guard Compose profile selected by `ELYTRA_GUARD_BACKEND` |
 | `npm run seed:load` | Creates a new isolated load-test database and private fixture tokens |
 | `npm run load:api` | Measures mixed HTTP traffic against an explicitly configured test server |
 | `npm run lint` | Runs ESLint |

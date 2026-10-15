@@ -2,7 +2,8 @@ import "server-only";
 import { authenticate, createUser, createSession, deleteSession, setAiOperated, SESSION_AGE, userByUsername, one, run, type UserRow } from "../data/core";
 import { profileByUsername, toggleFollowUser, editProfile, suggestedUsers, trends, readNotifications, unreadCount } from "../data/people";
 import { createAgentToken, listAgentTokens, revokeAgentToken } from "../data/agent-tokens";
-import { insertPost, postById, postThread, removePost, togglePostInteraction } from "../data/posts";
+import { postById, postThread, removePost, togglePostInteraction } from "../data/posts";
+import { publishPost } from "../moderation/publication";
 import { timeline } from "../data/timeline";
 import { usersPage, notificationsPage, markNotificationRead, relatedPostsPage, postUsersPage } from "../data/api";
 import { relationship, setSafety } from "../data/safety";
@@ -133,8 +134,8 @@ const endpoints: Endpoint[] = [
   } },
   { method: "POST", path: "/posts", summary: "Publish a post, reply, or quote", auth: true, response: "Post", status: 201, body: {
     content: { type: "string", maxLength: 280 }, replyToId: { ...idField, nullable: true }, quoteId: { ...idField, nullable: true }, mediaIds: { type: "array", maxItems: 4, items: idField }
-  }, handler(ctx) {
-    const viewer = requiredViewer(ctx), id = insertPost(viewer.id, { content: stringValue(ctx.body, "content"), replyToId: ctx.body.replyToId as string | null | undefined, quoteId: ctx.body.quoteId as string | null | undefined, mediaIds: ctx.body.mediaIds as string[] | undefined });
+  }, async handler(ctx) {
+    const viewer = requiredViewer(ctx), id = await publishPost(viewer.id, { content: stringValue(ctx.body, "content"), replyToId: ctx.body.replyToId as string | null | undefined, quoteId: ctx.body.quoteId as string | null | undefined, mediaIds: ctx.body.mediaIds as string[] | undefined });
     return data(postById(id, viewer.id), 201, { Location: `/api/v1/posts/${id}` });
   } },
   { method: "GET", path: "/posts/:id", summary: "Read a post", auth: false, response: "Post", handler: ctx => data(post(ctx)) },

@@ -14,6 +14,7 @@ import { Tabs } from "@/components/tabs";
 import { FollowsYouBadge } from "@/components/user-row";
 import { compactNumber, displayUrl, joinedDate } from "@/lib/format";
 import { getViewer } from "@/server/auth";
+import { messagingIdentity } from "@/server/data/encryption";
 import { getProfile } from "@/server/queries";
 
 export async function generateMetadata({ params }: LayoutProps<"/[username]">): Promise<Metadata> {
@@ -32,6 +33,7 @@ export default async function ProfileLayout({ params, children }: LayoutProps<"/
   if (!profile) notFound();
 
   const base = `/${profile.username}`;
+  const canMessage = viewer && !profile.isSelf && messagingIdentity(profile.id) !== null;
 
   return (
     <>
@@ -57,7 +59,7 @@ export default async function ProfileLayout({ params, children }: LayoutProps<"/
             <EditProfileButton profile={profile} />
           ) : (
             <div className="flex items-center gap-2">
-              {viewer && <MessageButton userId={profile.id} username={profile.username} />}
+              {canMessage && <MessageButton userId={profile.id} username={profile.username} />}
               <FollowButton userId={profile.id} following={profile.isFollowing} size="md" />
             </div>
           )}
