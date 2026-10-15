@@ -89,8 +89,10 @@ Keep the Node process running with your service manager. Then choose one of thes
 
 Set these variables before the app starts:
 
-- `ELYTRA_PUBLIC_ORIGIN` controls the REST API's origin checks for cookie-authenticated writes. Server Actions also verify the forwarded host.
+- `ELYTRA_PUBLIC_ORIGIN` controls the REST API's origin checks for cookie-authenticated writes. Server Actions also verify the forwarded host. It is also the origin in the image and oEmbed URLs of post link previews.
 - `ELYTRA_SEED_DEMO=false` turns off demo seeding and the demo login hint. Set it for both the build and the start command.
+
+Post links (`/<username>/status/<id>`) render previews in Discord, Slack, and similar apps. The page serves OpenGraph tags with the author, text, and images, and `/api/oembed` adds the author line and the reply, repost, and like counts. Both are readable without signing in, so the crawler needs to reach them.
 
 Production session cookies require HTTPS, and encrypted messaging needs the browser's secure context. Sign in through the public HTTPS URL. Don't add Cloudflare rules that cache authenticated pages or `/api/*`, such as "Cache Everything".
 

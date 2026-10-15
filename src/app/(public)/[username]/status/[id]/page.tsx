@@ -1,13 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
 import { getViewer } from "@/server/auth";
 import { notFound, redirect } from "next/navigation";
 import { Composer } from "@/components/composer";
 import { PageHeader } from "@/components/page-header";
 import { PostCard } from "@/components/post-card";
 import { UnavailablePost } from "@/components/quote-card";
+import { EMBED_COLOR, authorLine, embedDescription, embedImages, isCrawler, postUrl, publicOrigin } from "@/server/embed";
 import { getPostThread } from "@/server/queries";
+
+export async function generateViewport(): Promise<Viewport> {
+  return (await isCrawler()) ? { themeColor: EMBED_COLOR } : {};
+}
 
 export async function generateMetadata({
   params,
@@ -18,18 +22,29 @@ export async function generateMetadata({
   const { post } = thread;
   const text = post.content.length > 60 ? `${post.content.slice(0, 60)}…` : post.content;
   const title = `${post.author.displayName} on Elytra: "${text}"`;
-  const description = post.content || `View @${post.author.username}'s post on Elytra.`;
-  const requestHeaders = await headers();
-  const origin = process.env.ELYTRA_PUBLIC_ORIGIN ||
-    `${requestHeaders.get("x-forwarded-proto") || "http"}://${requestHeaders.get("host") || "localhost:3000"}`;
-  const url = new URL(`/${post.author.username}/status/${post.id}`, origin).toString();
-  const images = post.imageUrls.map((image) => new URL(image, origin).toString());
+  const embedTitle = authorLine(post);
+  const description = embedDescription(post);
+  const origin = await publicOrigin();
+  const url = postUrl(post, origin);
+  const { images, large } = embedImages(post, origin);
   return {
     title,
     description,
-    alternates: { canonical: url },
-    openGraph: { type: "article", siteName: "Elytra", title, description, url, images },
-    twitter: { card: images.length ? "summary_large_image" : "summary", title, description, images },
+    alternates: {
+      canonical: url,
+      types: { "application/json+oembed": new URL(`/api/oembed?id=${encodeURIComponent(post.id)}`, origin).toString() },
+    },
+    openGraph: {
+      type: "article",
+      siteName: "Elytra",
+      title: embedTitle,
+      description,
+      url,
+      images,
+      publishedTime: post.createdAt,
+      authors: [new URL(`/${post.author.username}`, origin).toString()],
+    },
+    twitter: { card: large ? "summary_large_image" : "summary", title: embedTitle, description, images },
   };
 }
 
