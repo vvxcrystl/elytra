@@ -22,9 +22,9 @@ let contract: string | undefined;
 
 const expectedErrors = new Set([
   "Username must be 3–15 letters, numbers, or underscores", "Display name must be 1–50 characters", "Password must be at least 8 characters", "Password must be at most 1024 characters", "That username isn't available",
-  "Posts can be at most 280 characters", "Write something or add an image", "Invalid images", "You cannot follow yourself",
+  "Posts can be at most 280 characters", "Write something or add an image", "Invalid images", "You cannot follow yourself", "Token name must be 1–40 characters", "Expiry must be 1 to 3650 days", "You can have at most 10 agent tokens. Revoke one first", "Elytra set this label on your account, so you can't change it",
 ]);
-const missingErrors = new Set(["Post not found", "User not found", "The post you are replying to no longer exists", "The quoted post no longer exists", "This post no longer exists"]);
+const missingErrors = new Set(["Post not found", "User not found", "The post you are replying to no longer exists", "The quoted post no longer exists", "This post no longer exists", "Token not found"]);
 /** Framework-independent dispatcher, also exercised directly by the API integration suite. */
 export async function handleApi(request: Request): Promise<Response> {
   const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Request-Id": randomUUID() });

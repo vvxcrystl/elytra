@@ -32,7 +32,7 @@ export function hydratePosts(ids: string[], viewerId: string | null): Map<string
     if (p.quote_id) {
       const q = rowMap.get(p.quote_id);
       quote = q ? { id: q.id, author: authors.get(q.author_id)!, content: q.content, createdAt: new Date(q.created_at).toISOString(), imageUrls: images.get(q.id) || [], deleted: false }
-        : { id: p.quote_id, author: { id: "", username: "", displayName: "Deleted post", avatarUrl: null, verified: false }, content: "", createdAt: new Date(0).toISOString(), imageUrls: [], deleted: true };
+        : { id: p.quote_id, author: { id: "", username: "", displayName: "Deleted post", avatarUrl: null, verified: false, aiOperated: false }, content: "", createdAt: new Date(0).toISOString(), imageUrls: [], deleted: true };
     }
     const parent = p.reply_to_id ? rowMap.get(p.reply_to_id) : null;
     const post: Post = { id: p.id, author: authors.get(p.author_id)!, content: p.content, createdAt: new Date(p.created_at).toISOString(), imageUrls: images.get(p.id) || [], replyToId: p.reply_to_id, replyToUsername: parent ? authors.get(parent.author_id)?.username || null : null, quote, likeCount: stats.get(p.id)?.likes || 0, repostCount: stats.get(p.id)?.reposts || 0, bookmarkCount: stats.get(p.id)?.bookmarks || 0, replyCount: stats.get(p.id)?.replies || 0, viewer: { liked: likes.has(p.id), reposted: reposts.has(p.id), bookmarked: bookmarks.has(p.id) } };
@@ -71,7 +71,7 @@ export function insertPost(viewerId: string, input: NewPost): string {
     if (reply) assertCanInteract(viewerId, reply.author_id);
     if (quote) assertCanInteract(viewerId, quote.author_id);
     const id = newId();
-    run("INSERT INTO posts VALUES(?,?,?,?,?,?)", id, viewerId, content, input.replyToId || null, input.quoteId || null, Date.now());
+    run("INSERT INTO posts(id,author_id,content,reply_to_id,quote_id,created_at) VALUES(?,?,?,?,?,?)", id, viewerId, content, input.replyToId || null, input.quoteId || null, Date.now());
     urls.forEach((url, i) => run("INSERT INTO post_images VALUES(?,?,?)", id, url, i));
     for (const tag of new Set(Array.from(content.matchAll(/(?:^|[^\p{L}\p{N}_])#([\p{L}\p{N}_]+)/gu), m => m[1].toLowerCase()))) run("INSERT INTO hashtags VALUES(?,?)", id, tag);
     const recipients = new Map<string, "reply" | "quote" | "mention">();

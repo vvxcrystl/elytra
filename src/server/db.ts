@@ -25,7 +25,8 @@ function initializeDatabase(db: DatabaseSync): void {
       id TEXT PRIMARY KEY, username TEXT NOT NULL, username_lower TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL, password_hash TEXT NOT NULL, bio TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', avatar_url TEXT,
-      banner_url TEXT, created_at INTEGER NOT NULL, verified INTEGER NOT NULL DEFAULT 0
+      banner_url TEXT, created_at INTEGER NOT NULL, verified INTEGER NOT NULL DEFAULT 0,
+      ai_operated INTEGER NOT NULL DEFAULT 0, ai_operated_override INTEGER CHECK(ai_operated_override IN (0,1))
     );
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -134,6 +135,12 @@ function initializeDatabase(db: DatabaseSync): void {
       purpose TEXT NOT NULL CHECK(purpose IN ('post','avatar','banner')),
       claimed INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS agent_tokens (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL,
+      expires_at INTEGER, last_used_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS agent_tokens_user ON agent_tokens(user_id,created_at);
     CREATE INDEX IF NOT EXISTS media_uploads_user ON media_uploads(user_id,created_at);
     CREATE INDEX IF NOT EXISTS posts_time ON posts(created_at DESC, id DESC);
     CREATE INDEX IF NOT EXISTS posts_author_time ON posts(author_id, created_at DESC);
@@ -163,6 +170,11 @@ function initializeDatabase(db: DatabaseSync): void {
     db.exec("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0");
     db.prepare("UPDATE users SET verified=1 WHERE username_lower='crystl'").run();
   }
+  // ai_operated is the account's own declaration. ai_operated_override is set only by an operator
+  // (scripts/set-ai-label.ts) and wins over it: NULL means no override, 1 forces the label on, 0 forces it off.
+  const userColumns = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+  if (!userColumns.includes("ai_operated")) db.exec("ALTER TABLE users ADD COLUMN ai_operated INTEGER NOT NULL DEFAULT 0");
+  if (!userColumns.includes("ai_operated_override")) db.exec("ALTER TABLE users ADD COLUMN ai_operated_override INTEGER CHECK(ai_operated_override IN (0,1))");
 }
 export function getDb(): DatabaseSync {
   if (globalDb.elytraDb && configured.has(globalDb.elytraDb)) return globalDb.elytraDb;

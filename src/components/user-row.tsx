@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { UserListItem } from "@/lib/types";
 import { Avatar } from "./avatar";
+import { AiOperatedBadge } from "./ai-labels";
 import { VerifiedBadge } from "./verified-badge";
 import { FollowButton } from "./follow-button";
 
@@ -19,6 +20,7 @@ export function UserRow({ user, showBio = true }: { user: UserListItem; showBio?
             <p className="truncate font-bold">
               {user.displayName}
               <VerifiedBadge user={user} className="ml-1" />
+              <AiOperatedBadge user={user} className="ml-1" />
             </p>
             <p className="flex items-center gap-1 truncate text-[15px] text-fg-muted">
               @{user.username}

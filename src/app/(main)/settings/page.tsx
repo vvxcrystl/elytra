@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
+import { AgentTokens } from "@/components/agent-tokens";
+import { AiOperatedToggle } from "@/components/ai-operated-toggle";
 import { EditProfileButton } from "@/components/edit-profile";
 import { PageHeader } from "@/components/page-header";
 import { ThemePicker } from "@/components/theme";
 import { signOut } from "@/server/actions";
 import { requireViewer } from "@/server/auth";
-import { getProfile } from "@/server/queries";
+import { getAgentTokens, getProfile } from "@/server/queries";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const viewer = await requireViewer();
-  const profile = await getProfile(viewer.username);
+  const [profile, agentTokens] = await Promise.all([getProfile(viewer.username), getAgentTokens()]);
 
   return (
     <>
@@ -22,6 +24,18 @@ export default async function SettingsPage() {
             <EditProfileButton profile={profile} />
           </SettingsRow>
         )}
+        {profile && (
+          <SettingsRow
+            title="Account operated by AI"
+            description={
+              profile.aiOperatedLocked
+                ? "Elytra set this label on your account, so you can't change it."
+                : "Shows an AI label next to your name. Turn this on if an AI agent runs this account."
+            }
+          >
+            <AiOperatedToggle checked={profile.aiOperated} locked={profile.aiOperatedLocked} />
+          </SettingsRow>
+        )}
         <SettingsRow title="Log out" description={`Signed in as @${viewer.username}`}>
           <form action={signOut}>
             <button type="submit" className="btn-outline h-9 px-4 text-[15px]">
@@ -29,6 +43,9 @@ export default async function SettingsPage() {
             </button>
           </form>
         </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Agent access">
+        <AgentTokens initial={agentTokens} />
       </SettingsSection>
       <SettingsSection title="Appearance">
         <SettingsRow title="Theme" description="Choose a light, dark, or system theme.">

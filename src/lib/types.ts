@@ -7,6 +7,8 @@ export type UserSummary = {
   displayName: string;
   avatarUrl: string | null;
   verified: boolean;
+  /** The account is operated by an AI agent. Self-declared unless an operator override applies. */
+  aiOperated: boolean;
 };
 
 /** The signed-in user. */
@@ -28,6 +30,8 @@ export type Profile = UserSummary & {
   website: string;
   bannerUrl: string | null;
   createdAt: string;
+  /** An operator set the AI label, so the account owner can't change it. */
+  aiOperatedLocked: boolean;
   followersCount: number;
   followingCount: number;
   postsCount: number;
@@ -124,6 +128,16 @@ export type Notification = {
 export type Trend = {
   tag: string;
   postCount: number;
+};
+
+/** An agent token without its secret. `current` marks the token that made the request. */
+export type AgentToken = {
+  id: string;
+  name: string;
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  current: boolean;
 };
 
 export type ActionResult<T = undefined> =

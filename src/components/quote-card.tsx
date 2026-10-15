@@ -4,6 +4,7 @@ import type { QuotedPost } from "@/lib/types";
 import { Avatar } from "./avatar";
 import { ImageGrid } from "./image-grid";
 import { RelativeTime } from "./relative-time";
+import { AiOperatedBadge } from "./ai-labels";
 import { VerifiedBadge } from "./verified-badge";
 
 export function QuoteCard({
@@ -21,6 +22,7 @@ export function QuoteCard({
         <Avatar user={quote.author} size="xs" />
         <span className="ml-1 truncate font-bold text-fg">{quote.author.displayName}</span>
         <VerifiedBadge user={quote.author} />
+        <AiOperatedBadge user={quote.author} />
         <span className="truncate text-fg-muted">@{quote.author.username}</span>
         <span className="text-fg-muted">·</span>
         <span className="shrink-0 text-fg-muted">

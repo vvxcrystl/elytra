@@ -1,9 +1,11 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toggleFollow } from "@/server/actions";
 import { useToast } from "./toast";
+import { useOptionalViewer } from "./viewer-context";
 
 export function FollowButton({
   userId,
@@ -15,6 +17,7 @@ export function FollowButton({
   size?: "sm" | "md";
 }) {
   const toast = useToast();
+  const viewer = useOptionalViewer();
   const [state, setState] = useState(following);
   const [synced, setSynced] = useState(following);
   const [pending, startTransition] = useTransition();
@@ -41,6 +44,14 @@ export function FollowButton({
   }
 
   const sizing = size === "md" ? "h-9 px-4 text-[15px]" : "h-8 px-4 text-sm";
+
+  if (!viewer) {
+    return (
+      <Link href="/login" className={clsx("btn-inverse", sizing)}>
+        Follow
+      </Link>
+    );
+  }
 
   if (state) {
     return (

@@ -22,7 +22,7 @@ export function profileByUsername(username: string, viewerId: string | null): Pr
     (SELECT COUNT(*) FROM follows WHERE followee_id=?) AS followers,
     (SELECT COUNT(*) FROM follows WHERE follower_id=?) AS following,
     (SELECT COUNT(*) FROM posts WHERE author_id=?) AS posts`, user.id, user.id, user.id)!;
-  return { ...flags, location: user.location, website: user.website, bannerUrl: user.banner_url, createdAt: new Date(user.created_at).toISOString(), followersCount: counts.followers, followingCount: counts.following, postsCount: counts.posts };
+  return { ...flags, location: user.location, website: user.website, bannerUrl: user.banner_url, createdAt: new Date(user.created_at).toISOString(), aiOperatedLocked: user.ai_operated_override !== null, followersCount: counts.followers, followingCount: counts.following, postsCount: counts.posts };
 }
 export function followersOf(username: string, viewerId: string | null, direction: "followers" | "following"): UserListItem[] {
   const user = userByUsername(username);

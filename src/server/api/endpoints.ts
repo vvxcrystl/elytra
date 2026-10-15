@@ -1,6 +1,7 @@
 import "server-only";
-import { authenticate, createUser, createSession, deleteSession, SESSION_AGE, userByUsername, one, run, type UserRow } from "../data/core";
+import { authenticate, createUser, createSession, deleteSession, setAiOperated, SESSION_AGE, userByUsername, one, run, type UserRow } from "../data/core";
 import { profileByUsername, toggleFollowUser, editProfile, suggestedUsers, trends, readNotifications, unreadCount } from "../data/people";
+import { createAgentToken, listAgentTokens, revokeAgentToken } from "../data/agent-tokens";
 import { insertPost, postById, postThread, removePost, togglePostInteraction } from "../data/posts";
 import { timeline } from "../data/timeline";
 import { usersPage, notificationsPage, markNotificationRead, relatedPostsPage, postUsersPage } from "../data/api";
@@ -50,11 +51,11 @@ const envelopeFields: Fields = {
   recipientIv: encoded(16), recipientCiphertext: encoded(53355), senderIv: encoded(16), senderCiphertext: encoded(53355), signature: encoded(86),
 };
 const endpoints: Endpoint[] = [
-  { method: "POST", path: "/auth/register", summary: "Create an account and session", auth: false, body: { ...credentialsBody, password: { ...credentialsBody.password, minLength: 8 }, displayName: { type: "string", required: true, minLength: 1, maxLength: 50 } }, response: "AuthSession", status: 201, async handler(ctx) {
+  { method: "POST", path: "/auth/register", summary: "Create an account and session", auth: false, body: { ...credentialsBody, password: { ...credentialsBody.password, minLength: 8 }, displayName: { type: "string", required: true, minLength: 1, maxLength: 50 }, aiOperated: { type: "boolean" } }, response: "AuthSession", status: 201, async handler(ctx) {
     rateLimit(`registration:${clientKey(ctx.request)}`, 20, 60 * 60 * 1000);
     const username = stringValue(ctx.body, "username");
     if (userByUsername(username)) throw new AppError(409, "username_taken", "That username is already taken");
-    const viewer = await createUser(username, stringValue(ctx.body, "displayName"), stringValue(ctx.body, "password"));
+    const viewer = await createUser(username, stringValue(ctx.body, "displayName"), stringValue(ctx.body, "password"), ctx.body.aiOperated === true);
     ctx.viewer = viewer;
     return data(startSession(ctx, viewer), 201);
   } },
@@ -66,8 +67,9 @@ const endpoints: Endpoint[] = [
     ctx.viewer = viewer;
     return data(startSession(ctx, viewer));
   } },
-  { method: "POST", path: "/auth/logout", summary: "Revoke the current session", auth: true, response: "Success", handler(ctx) {
-    if (ctx.token) deleteSession(ctx.token);
+  { method: "POST", path: "/auth/logout", summary: "Revoke the current session or agent token", auth: true, response: "Success", handler(ctx) {
+    if (ctx.token?.startsWith("eat_")) { const current = listAgentTokens(requiredViewer(ctx).id, ctx.token).find(t => t.current); if (current) revokeAgentToken(requiredViewer(ctx).id, current.id); }
+    else if (ctx.token) deleteSession(ctx.token);
     ctx.headers.set("Set-Cookie", sessionCookie("", 0)); return data({ success: true });
   } },
   { method: "DELETE", path: "/auth/sessions", summary: "Revoke all of your sessions", auth: true, response: "Success", handler(ctx) {
@@ -80,7 +82,7 @@ const endpoints: Endpoint[] = [
   { method: "GET", path: "/users/:id/encryption-keys", summary: "Get an account's public messaging keys", auth: true, response: "PublicIdentityResult", handler(ctx) { if (!user(ctx)) throw new AppError(404, "not_found", "User not found"); return data(messagingIdentity(ctx.params.id)); } },
   { method: "PATCH", path: "/users/me", summary: "Update your profile", auth: true, response: "Profile", body: {
     displayName: { type: "string", minLength: 1, maxLength: 50 }, bio: { type: "string", maxLength: 160 }, location: { type: "string", maxLength: 30 }, website: { type: "string", maxLength: 100 },
-    avatarMediaId: idField, bannerMediaId: idField, removeAvatar: { type: "boolean" }, removeBanner: { type: "boolean" },
+    avatarMediaId: idField, bannerMediaId: idField, removeAvatar: { type: "boolean" }, removeBanner: { type: "boolean" }, aiOperated: { type: "boolean" },
   }, async handler(ctx) {
     if (!Object.keys(ctx.body).length) throw new AppError(400, "validation_error", "Provide at least one profile field");
     const viewer = requiredViewer(ctx), current = profileByUsername(viewer.username, viewer.id)!;
@@ -93,11 +95,19 @@ const endpoints: Endpoint[] = [
       catch { throw new AppError(400, "validation_error", "Enter a valid http or https website up to 100 characters"); }
     }
     if ((ctx.body.avatarMediaId && ctx.body.removeAvatar) || (ctx.body.bannerMediaId && ctx.body.removeBanner)) throw new AppError(400, "validation_error", "Cannot replace and remove the same image");
-    const obsolete = editProfile(viewer.id, { displayName, bio: stringValue(ctx.body, "bio", current.bio).trim(), location: stringValue(ctx.body, "location", current.location).trim(), website,
+    const obsolete = transaction(() => {
+      if (ctx.body.aiOperated !== undefined) setAiOperated(viewer.id, ctx.body.aiOperated as boolean);
+      return editProfile(viewer.id, { displayName, bio: stringValue(ctx.body, "bio", current.bio).trim(), location: stringValue(ctx.body, "location", current.location).trim(), website,
       avatarMediaId: ctx.body.avatarMediaId as string | undefined, bannerMediaId: ctx.body.bannerMediaId as string | undefined,
       avatarUrl: ctx.body.removeAvatar ? null : undefined, bannerUrl: ctx.body.removeBanner ? null : undefined });
+    });
     await removeImages(obsolete); return data(profile(ctx, userByUsername(viewer.username)));
   } },
+  { method: "GET", path: "/users/me/agent-tokens", summary: "List your agent tokens, marking the one making this request", auth: true, response: "AgentTokenArray", handler: ctx => data(listAgentTokens(requiredViewer(ctx).id, ctx.token)) },
+  { method: "POST", path: "/users/me/agent-tokens", summary: "Create a long-lived, revocable agent token; the secret is shown once", auth: true, response: "AgentTokenSecret", status: 201, body: {
+    name: { type: "string", required: true, minLength: 1, maxLength: 40 }, expiresInDays: { type: "integer", nullable: true, minimum: 1, maximum: 3650 },
+  }, handler: ctx => data(createAgentToken(requiredViewer(ctx).id, stringValue(ctx.body, "name"), typeof ctx.body.expiresInDays === "number" ? ctx.body.expiresInDays : null), 201) },
+  { method: "DELETE", path: "/users/me/agent-tokens/:id", summary: "Revoke an agent token", auth: true, response: "Deleted", handler(ctx) { revokeAgentToken(requiredViewer(ctx).id, ctx.params.id); return data({ deleted: true }); } },
   { method: "GET", path: "/users/me/blocks", summary: "List accounts you blocked", auth: true, response: "UserListItem", paged: true, handler: ctx => page(usersPage(requiredViewer(ctx).id, pageOptions(ctx), { safety: "block" })) },
   { method: "GET", path: "/users/me/mutes", summary: "List accounts you muted", auth: true, response: "UserListItem", paged: true, handler: ctx => page(usersPage(requiredViewer(ctx).id, pageOptions(ctx), { safety: "mute" })) },
   { method: "GET", path: "/users/suggestions", summary: "Suggest accounts to follow", auth: false, response: "UserListItemArray", query: { limit: {} }, handler: ctx => data(suggestedUsers(pageOptions(ctx).limit, ctx.viewer?.id ?? null)) },
@@ -122,7 +132,7 @@ const endpoints: Endpoint[] = [
     const options = pageOptions(ctx); return page(timeline({ kind: "search", q: queryText(ctx, "q", 500, true), tab: enumQuery(ctx, "tab", ["top", "latest", "media"], "latest") }, options.cursor, ctx.viewer?.id ?? null, { limit: options.limit, strictCursor: true }));
   } },
   { method: "POST", path: "/posts", summary: "Publish a post, reply, or quote", auth: true, response: "Post", status: 201, body: {
-    content: { type: "string", maxLength: 280 }, replyToId: { ...idField, nullable: true }, quoteId: { ...idField, nullable: true }, mediaIds: { type: "array", maxItems: 4, items: idField },
+    content: { type: "string", maxLength: 280 }, replyToId: { ...idField, nullable: true }, quoteId: { ...idField, nullable: true }, mediaIds: { type: "array", maxItems: 4, items: idField }
   }, handler(ctx) {
     const viewer = requiredViewer(ctx), id = insertPost(viewer.id, { content: stringValue(ctx.body, "content"), replyToId: ctx.body.replyToId as string | null | undefined, quoteId: ctx.body.quoteId as string | null | undefined, mediaIds: ctx.body.mediaIds as string[] | undefined });
     return data(postById(id, viewer.id), 201, { Location: `/api/v1/posts/${id}` });

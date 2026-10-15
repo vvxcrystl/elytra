@@ -1,6 +1,7 @@
 "use client";
 
 import { VerifiedBadge } from "./verified-badge";
+import { AiOperatedBadge } from "./ai-labels";
 import clsx from "clsx";
 import {
   Bookmark,
@@ -291,6 +292,7 @@ export function PostCard({
             >
               {post.author.displayName}
               <VerifiedBadge user={post.author} className="ml-1" />
+              <AiOperatedBadge user={post.author} className="ml-1" />
             </Link>
             <Link href={`/${post.author.username}`} className="block truncate text-fg-muted">
               @{post.author.username}
@@ -352,6 +354,7 @@ export function PostCard({
                 {post.author.displayName}
               </Link>
               <VerifiedBadge user={post.author} />
+              <AiOperatedBadge user={post.author} />
               <Link href={`/${post.author.username}`} className="truncate text-fg-muted">
                 @{post.author.username}
               </Link>

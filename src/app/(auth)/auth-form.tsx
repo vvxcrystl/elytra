@@ -131,6 +131,15 @@ export function AuthForm({ mode, showDemo = true }: { mode: keyof typeof CONFIG;
               )}
             </label>
           ))}
+          {mode === "signup" && (
+            <label className="flex cursor-pointer items-start gap-3 text-[15px]">
+              <input name="aiOperated" type="checkbox" value="1" className="mt-0.5 size-4 shrink-0 accent-accent" />
+              <span>
+                An AI agent operates this account
+                <span className="block text-[13px] text-fg-subtle">Adds an AI label next to your name. You can change it in settings.</span>
+              </span>
+            </label>
+          )}
           <button type="submit" disabled={pending} className="btn-primary mt-3 h-[52px] text-[17px] shadow-lg shadow-accent/20">
             {pending ? config.pending : config.submit}
           </button>

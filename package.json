@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/seed.ts",
+    "agent-token": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/agent-token.ts",
+    "ai-label": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/set-ai-label.ts",
     "test:backend": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-backend.ts",
     "test:api": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-api.ts",
     "test:e2ee": "node --experimental-strip-types --conditions=react-server --import ./scripts/register.mjs scripts/test-e2ee.ts",

@@ -10,12 +10,12 @@ const bool = { type: "boolean" }, count = { type: "integer", minimum: 0 }, date 
 const nullable = (schema: Schema): Schema => ({ anyOf: [schema, { type: "null" }] });
 const array = (schema: Schema): Schema => ({ type: "array", items: schema });
 const obj = (properties: Record<string, Schema>): Schema => ({ type: "object", properties, required: Object.keys(properties), additionalProperties: false });
-const summaryFields = { id: str(), username: str(), displayName: str(), avatarUrl: nullable(str()), verified: bool };
+const summaryFields = { id: str(), username: str(), displayName: str(), avatarUrl: nullable(str()), verified: bool, aiOperated: bool };
 const listFields = { ...summaryFields, bio: str(), isFollowing: bool, followsYou: bool, isSelf: bool };
 export const schemas: Record<string, Schema> = {
   UserSummary: obj(summaryFields),
   UserListItem: obj(listFields),
-  Profile: obj({ ...listFields, location: str(), website: str(), bannerUrl: nullable(str()), createdAt: date, followersCount: count, followingCount: count, postsCount: count, isBlocked: bool, isMuted: bool, blockedBy: bool }),
+  Profile: obj({ ...listFields, location: str(), website: str(), bannerUrl: nullable(str()), createdAt: date, aiOperatedLocked: bool, followersCount: count, followingCount: count, postsCount: count, isBlocked: bool, isMuted: bool, blockedBy: bool }),
   QuotedPost: obj({ id: str(), author: ref("UserSummary"), content: str(), createdAt: date, imageUrls: array(str()), deleted: bool }),
   Post: obj({ id: str(), author: ref("UserSummary"), content: str(), createdAt: date, imageUrls: array(str()), replyToId: nullable(str()), replyToUsername: nullable(str()), quote: nullable(ref("QuotedPost")), replyCount: count, repostCount: count, likeCount: count, bookmarkCount: count, viewer: obj({ liked: bool, reposted: bool, bookmarked: bool }) }),
   FeedItem: obj({ key: str(), post: ref("Post"), repostedBy: nullable(ref("UserSummary")) }),
@@ -24,6 +24,9 @@ export const schemas: Record<string, Schema> = {
   Trend: obj({ tag: str(), postCount: count }),
   TrendArray: array(ref("Trend")), UserListItemArray: array(ref("UserListItem")),
   AuthSession: obj({ user: ref("Profile"), accessToken: str(), tokenType: str({ const: "Bearer" }), expiresAt: date }),
+  AgentToken: obj({ id: str(), name: str(), createdAt: date, expiresAt: nullable(date), lastUsedAt: nullable(date), current: bool }),
+  AgentTokenSecret: obj({ id: str(), name: str(), createdAt: date, expiresAt: nullable(date), lastUsedAt: nullable(date), current: bool, token: str() }),
+  AgentTokenArray: array(ref("AgentToken")),
   Success: obj({ success: bool }), Deleted: obj({ deleted: bool }), Following: obj({ following: bool }), Blocked: obj({ blocked: bool }), Muted: obj({ muted: bool }),
   Interaction: obj({ active: bool, count }), UnreadCount: obj({ unreadCount: count }),
   EncryptedEnvelope: obj({ version: str({ const: DM_PROTOCOL }), clientId: str({ format: "uuid" }), senderKeyId: str(), recipientKeyId: str(), ephemeralPublicKey: str(), salt: str(), recipientIv: str(), recipientCiphertext: str(), senderIv: str(), senderCiphertext: str(), signature: str() }),
@@ -40,7 +43,7 @@ function requestSchema(fields: Fields): Schema {
   function fieldSchema(field: Field): Schema {
     if (field.type === "object") return requestSchema(field.fields ?? {});
     const schema: Schema = { type: field.type };
-    for (const name of ["minLength", "maxLength", "pattern", "enum", "maxItems"] as const) if (field[name] !== undefined) schema[name] = field[name];
+    for (const name of ["minLength", "maxLength", "minimum", "maximum", "pattern", "enum", "maxItems"] as const) if (field[name] !== undefined) schema[name] = field[name];
     if (field.items) schema.items = fieldSchema(field.items);
     return field.nullable ? nullable(schema) : schema;
   }

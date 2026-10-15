@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { Heart, Repeat2, User } from "lucide-react";
+import { AiOperatedBadge } from "@/components/ai-labels";
 import { VerifiedBadge } from "@/components/verified-badge";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -88,7 +89,8 @@ function NotificationRow({ notification: n }: { notification: Notification }) {
         <Avatar user={n.actor} size="sm" />
         <p className="mt-2 text-[15px]">
           <span className="font-bold">{n.actor.displayName}</span>
-          <VerifiedBadge user={n.actor} className="mx-0.5" /> {activity.text}
+          <VerifiedBadge user={n.actor} className="mx-0.5" />
+          <AiOperatedBadge user={n.actor} className="mx-0.5" /> {activity.text}
           <span className="text-fg-muted">
             {" · "}
             <RelativeTime iso={n.createdAt} />

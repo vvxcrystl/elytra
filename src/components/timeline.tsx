@@ -5,6 +5,7 @@ import type { FeedItem, Page, TimelineSource } from "@/lib/types";
 import { fetchTimeline, recordImpressions } from "@/server/actions";
 import { PostCard } from "./post-card";
 import { Spinner } from "./spinner";
+import { useOptionalViewer } from "./viewer-context";
 
 /**
  * Server renders the first page; later pages load as the sentinel scrolls into view.
@@ -62,7 +63,7 @@ export function Timeline({
   }, [cursor]);
 
   const items = dedupe([...initial.items, ...extra]);
-  const listRef = useImpressions(items.length);
+  const listRef = useImpressions(items.length, useOptionalViewer() !== null);
 
   if (items.length === 0) return <>{empty}</>;
 
@@ -101,7 +102,7 @@ function dedupe(items: FeedItem[]) {
  * Reports posts that were at least half on screen, so For You can skip what you've already seen.
  * Each post is sent once per page view, batched every couple of seconds.
  */
-function useImpressions(itemCount: number) {
+function useImpressions(itemCount: number, signedIn: boolean) {
   const listRef = useRef<HTMLDivElement>(null);
   const sent = useRef(new Set<string>());
   const pending = useRef(new Set<string>());
@@ -112,7 +113,7 @@ function useImpressions(itemCount: number) {
       if (pending.current.size === 0) return;
       const ids = [...pending.current].slice(0, 100);
       ids.forEach((id) => pending.current.delete(id));
-      void recordImpressions(ids);
+      if (signedIn) void recordImpressions(ids);
     };
     const observer = new IntersectionObserver(
       (entries) => {
@@ -132,7 +133,7 @@ function useImpressions(itemCount: number) {
       clearInterval(timer);
       observer.disconnect();
     };
-  }, []);
+  }, [signedIn]);
 
   // Observe newly rendered posts after each page load.
   useEffect(() => {

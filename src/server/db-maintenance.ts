@@ -7,6 +7,7 @@ export function maintainDatabase(db: DatabaseSync, now = Date.now()): void {
   lastRun.set(db, now);
   for (const [table, column, cutoff] of [
     ["sessions", "expires_at", now],
+    ["agent_tokens", "expires_at", now],
     ["api_rate_limits", "reset_at", now],
     ["timeline_snapshots", "created_at", now - 86400000],
   ] as const) {

@@ -3,11 +3,12 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import type { ActionResult, FormState, TimelineSource, Page, FeedItem } from "@/lib/types";
+import type { ActionResult, AgentToken, FormState, TimelineSource, Page, FeedItem } from "@/lib/types";
 import { POST_MAX_IMAGES, POST_MAX_LENGTH } from "../lib/types";
 import { getViewer } from "./auth";
 import { getTimeline } from "./queries";
-import { authenticate, createUser, createSession, deleteSession, userByUsername, SESSION_AGE, RESERVED_USERNAMES } from "./data/core";
+import { authenticate, createUser, createSession, deleteSession, setAiOperated, userByUsername, SESSION_AGE, RESERVED_USERNAMES } from "./data/core";
+import { createAgentToken, revokeAgentToken } from "./data/agent-tokens";
 import { insertPost, removePost, togglePostInteraction } from "./data/posts";
 import { editProfile, profileByUsername, toggleFollowUser, readNotifications } from "./data/people";
 import { validTimelineSource } from "./data/timeline";
@@ -46,7 +47,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   if (password.length < 8) fieldErrors.password = "Password must be at least 8 characters";
   if (Object.keys(fieldErrors).length) return { fieldErrors };
   let id: string;
-  try { limitRegistration(await headers()); id = (await createUser(username, username, password)).id; }
+  try { limitRegistration(await headers()); id = (await createUser(username, username, password, text(formData, "aiOperated") === "1")).id; }
   catch (error) {
     if (userByUsername(username)) return { fieldErrors: { username: "That username is already taken" } };
     console.error("Unable to create account", error);
@@ -191,6 +192,35 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
   await removeImages(obsolete);
   refresh();
   return { success: true };
+}
+export async function updateAiOperated(value: boolean): Promise<ActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: SIGN_IN_ERROR };
+  try {
+    if (typeof value !== "boolean") throw new Error("Invalid value");
+    setAiOperated(viewer.id, value);
+  } catch (error) { return { ok: false, error: errorMessage(error) }; }
+  refresh();
+  return { ok: true, data: undefined };
+}
+export async function makeAgentToken(name: string, expiresInDays: number | null): Promise<ActionResult<AgentToken & { token: string }>> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: SIGN_IN_ERROR };
+  let created;
+  try {
+    if (typeof name !== "string" || (expiresInDays !== null && typeof expiresInDays !== "number")) throw new Error("Invalid token settings");
+    created = createAgentToken(viewer.id, name, expiresInDays);
+  } catch (error) { return { ok: false, error: errorMessage(error) }; }
+  return { ok: true, data: created };
+}
+export async function removeAgentToken(id: string): Promise<ActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: SIGN_IN_ERROR };
+  try {
+    if (!validId(id)) throw new Error("Invalid token ID");
+    revokeAgentToken(viewer.id, id);
+  } catch (error) { return { ok: false, error: errorMessage(error) }; }
+  return { ok: true, data: undefined };
 }
 /** Onboarding's profile step: name, bio, and avatar. Keeps the location, website, and banner as they are. */
 export async function saveOnboardingProfile(_prev: FormState, formData: FormData): Promise<FormState> {

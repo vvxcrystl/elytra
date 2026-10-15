@@ -1,8 +1,9 @@
 import "server-only";
-import type { FeedItem, Page, TimelineSource, PostThread, Post, Profile, UserListItem, Trend, Notification } from "@/lib/types";
+import type { AgentToken, FeedItem, Page, TimelineSource, PostThread, Post, Profile, UserListItem, Trend, Notification } from "@/lib/types";
 import { getViewer } from "./auth";
 import { timeline } from "./data/timeline";
 import { postById, postThread } from "./data/posts";
+import { listAgentTokens } from "./data/agent-tokens";
 import { profileByUsername, followersOf, findUsers, suggestedUsers, trends, notificationsFor, unreadCount } from "./data/people";
 
 const viewerId = async () => (await getViewer())?.id || null;
@@ -17,3 +18,4 @@ export async function getWhoToFollow(limit = 3): Promise<UserListItem[]> { retur
 export async function getTrends(limit = 5): Promise<Trend[]> { await getViewer(); return trends(limit); }
 export async function getNotifications(opts?: { mentionsOnly?: boolean }): Promise<Notification[]> { return notificationsFor(await viewerId(), opts?.mentionsOnly); }
 export async function getUnreadNotificationCount(): Promise<number> { return unreadCount(await viewerId()); }
+export async function getAgentTokens(): Promise<AgentToken[]> { const id = await viewerId(); return id ? listAgentTokens(id, null) : []; }

@@ -1,4 +1,5 @@
 import { CalendarDays, Link2, MapPin } from "lucide-react";
+import { AiOperatedBadge } from "@/components/ai-labels";
 import { VerifiedBadge } from "@/components/verified-badge";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { RichText } from "@/components/rich-text";
 import { Tabs } from "@/components/tabs";
 import { FollowsYouBadge } from "@/components/user-row";
 import { compactNumber, displayUrl, joinedDate } from "@/lib/format";
+import { getViewer } from "@/server/auth";
 import { getProfile } from "@/server/queries";
 
 export async function generateMetadata({ params }: LayoutProps<"/[username]">): Promise<Metadata> {
@@ -26,7 +28,7 @@ export async function generateMetadata({ params }: LayoutProps<"/[username]">): 
 
 export default async function ProfileLayout({ params, children }: LayoutProps<"/[username]">) {
   const { username } = await params;
-  const profile = await getProfile(username);
+  const [profile, viewer] = await Promise.all([getProfile(username), getViewer()]);
   if (!profile) notFound();
 
   const base = `/${profile.username}`;
@@ -55,7 +57,7 @@ export default async function ProfileLayout({ params, children }: LayoutProps<"/
             <EditProfileButton profile={profile} />
           ) : (
             <div className="flex items-center gap-2">
-              <MessageButton userId={profile.id} username={profile.username} />
+              {viewer && <MessageButton userId={profile.id} username={profile.username} />}
               <FollowButton userId={profile.id} following={profile.isFollowing} size="md" />
             </div>
           )}
@@ -65,6 +67,7 @@ export default async function ProfileLayout({ params, children }: LayoutProps<"/
           <h2 className="text-xl leading-6 font-extrabold">
             {profile.displayName}
             <VerifiedBadge user={profile} className="ml-1" />
+            <AiOperatedBadge user={profile} className="ml-1.5 align-middle" />
           </h2>
           <p className="flex items-center gap-1.5 text-[15px] text-fg-muted">
             @{profile.username}

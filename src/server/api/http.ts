@@ -1,12 +1,12 @@
 import "server-only";
 import type { Viewer, Page } from "../../lib/types";
 import { AppError } from "../errors";
-import { viewerForToken } from "../data/core";
+import { agentTokenViewer, viewerForToken } from "../data/core";
 import { backendConfig } from "../config";
 import type { PageOptions } from "../data/pagination";
 export { rateLimit, clientKey } from "../rate-limit";
 
-export type Field = { type: "string" | "boolean" | "array" | "object"; required?: boolean; minLength?: number; maxLength?: number; pattern?: string; enum?: string[]; nullable?: boolean; maxItems?: number; items?: Field; fields?: Fields };
+export type Field = { type: "string" | "boolean" | "integer" | "array" | "object"; required?: boolean; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; enum?: string[]; nullable?: boolean; maxItems?: number; items?: Field; fields?: Fields };
 export type Fields = Record<string, Field>;
 export type Input = Record<string, unknown>;
 export type ApiContext = {
@@ -54,6 +54,9 @@ export function validate(value: unknown, fields: Fields): Input {
       if (!Array.isArray(v)) return "Expected an array";
       if (v.length > (rule.maxItems ?? 100)) return `Add at most ${rule.maxItems ?? 100} items`;
       if (rule.items && v.some(item => fieldError(item, rule.items!))) return "Invalid array item";
+    } else if (rule.type === "integer") {
+      if (typeof v !== "number" || !Number.isInteger(v)) return "Expected an integer";
+      if (v < (rule.minimum ?? -Infinity) || v > (rule.maximum ?? Infinity)) return `Must be ${rule.minimum ?? "any"}–${rule.maximum ?? "any"}`;
     } else if (typeof v !== rule.type) return `Expected ${rule.type}`;
     if (typeof v === "string") {
       const length = [...v].length;
@@ -123,9 +126,10 @@ export function credentials(request: Request): { token: string | null; viewer: V
   const auth = request.headers.get("authorization");
   const cookie = request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith("elytra_session="))?.slice("elytra_session=".length) ?? null;
   if (auth !== null) {
-    const match = /^Bearer ([a-f0-9]{64})$/i.exec(auth);
+    const match = /^Bearer ((?:eat_)?[a-f0-9]{64})$/i.exec(auth);
     if (!match) throw new AppError(401, "unauthorized", "Invalid bearer token");
-    const viewer = viewerForToken(match[1]);
+    // Agent tokens work only as bearer tokens. A cookie can never carry one.
+    const viewer = match[1].startsWith("eat_") ? agentTokenViewer(match[1]) : viewerForToken(match[1]);
     if (!viewer) throw new AppError(401, "unauthorized", "Invalid or expired bearer token");
     return { token: match[1], viewer, bearer: true };
   }
