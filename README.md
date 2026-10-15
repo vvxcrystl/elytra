@@ -2,7 +2,7 @@
 
 # elytra
 
-A Twitter-style social app built with Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. It needs no external services.
+The light weight social media platform, built with [ts-rust](https://github.com/pingdotgg/ts-rust), Next.js 16, React 19, Tailwind CSS v4, and SQLite through Node's built-in `node:sqlite`. It needs no external services.
 
 ## Run it
 
