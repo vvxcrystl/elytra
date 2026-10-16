@@ -2,6 +2,8 @@ import "server-only";
 import { all, one, placeholders, run } from "./core";
 import { transaction } from "../db";
 import { AppError } from "../errors";
+import { heldPostFilter } from "../moderation/policy";
+import { blockedIds } from "./safety";
 
 export function validPostId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(value);
@@ -9,14 +11,17 @@ export function validPostId(value: unknown): value is string {
 
 const REPEAT_MS = 60000;
 /** Batches are atomic; removed posts are harmless when a visibility callback arrives late.
- * A post's view count goes up with each counted impression, except the author's own. */
+ * A post's view count goes up with each counted impression, except the author's own.
+ * Only visible posts count: feedback from a blocked user or a held post is dropped,
+ * so analytics cannot be poisoned through this endpoint and shadow-held posts give no oracle. */
 export function saveImpressions(viewerId: string, postIds: string[], now = Date.now()): void {
   if (!Array.isArray(postIds) || postIds.length > 100 || postIds.some(id => !validPostId(id))) throw new Error("Invalid post IDs (at most 100)");
   const ids = [...new Set(postIds)];
   if (!ids.length) return;
   transaction(() => {
-    const present = all<{ id: string; author_id: string }>(`SELECT id,author_id FROM posts WHERE id IN (${placeholders(ids)})`, ...ids);
-    for (const { id, author_id } of present) {
+    const blocked = blockedIds(viewerId);
+    const visible = all<{ id: string; author_id: string }>(`SELECT p.id,p.author_id FROM posts p WHERE p.id IN (${placeholders(ids)}) AND ${heldPostFilter()}`, ...ids).filter(p => !blocked.has(p.author_id));
+    for (const { id, author_id } of visible) {
       const seen = one<{ last_seen_at: number }>("SELECT last_seen_at FROM impressions WHERE user_id=? AND post_id=?", viewerId, id);
       run(`INSERT INTO impressions VALUES(?,?,?,?,1)
         ON CONFLICT(user_id,post_id) DO UPDATE SET last_seen_at=excluded.last_seen_at,
@@ -36,8 +41,8 @@ export const validVisitKind = (value: unknown): value is PostVisitKind => typeof
 export function savePostVisit(viewerId: string, postId: string, kind: PostVisitKind, now = Date.now()): void {
   if (!validPostId(postId) || !validVisitKind(kind)) throw new Error("Invalid post visit");
   transaction(() => {
-    const post = one<{ author_id: string }>("SELECT author_id FROM posts WHERE id=?", postId);
-    if (!post) return;
+    const post = one<{ author_id: string }>(`SELECT p.author_id FROM posts p WHERE p.id=? AND ${heldPostFilter()}`, postId);
+    if (!post || blockedIds(viewerId).has(post.author_id)) return;
     if (kind === "detail") saveImpressions(viewerId, [postId], now);
     if (post.author_id === viewerId) return;
     const visit = one<{ last_at: number }>("SELECT last_at FROM post_visits WHERE user_id=? AND post_id=? AND kind=?", viewerId, postId, kind);
