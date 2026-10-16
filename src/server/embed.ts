@@ -11,12 +11,23 @@ export async function isCrawler(): Promise<boolean> {
   return CRAWLER.test((await headers()).get("user-agent") ?? "");
 }
 
-/** The public origin, from ELYTRA_PUBLIC_ORIGIN or the forwarded request headers. */
+/** The public origin, from ELYTRA_PUBLIC_ORIGIN or the forwarded request headers.
+ * Clients can set forwarded headers when the app is reachable without the tunnel, and the result
+ * ends up in meta tags and oEmbed links, so the ordinary Host header wins, forwarded hosts are
+ * only a fallback, and only a plausible http(s) origin is accepted — anything else falls back to
+ * localhost:3000. Pin ELYTRA_PUBLIC_ORIGIN in production to take request headers out entirely. */
 export async function publicOrigin(): Promise<string> {
   if (process.env.ELYTRA_PUBLIC_ORIGIN) return process.env.ELYTRA_PUBLIC_ORIGIN;
   const requestHeaders = await headers();
-  const proto = requestHeaders.get("x-forwarded-proto") || "http";
-  return `${proto}://${requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000"}`;
+  const proto = requestHeaders.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase() || "http";
+  // The Host header is set by the tunnel itself; a client-set x-forwarded-host only counts if no Host arrived.
+  const host = (requestHeaders.get("host") ?? requestHeaders.get("x-forwarded-host") ?? "").split(",")[0].trim();
+  if (/^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(host)) {
+    const origin = `${proto === "https" ? "https" : "http"}://${host}`;
+    // new URL also rejects malformed ports and normalizes case, so compare on the canonical form.
+    try { if (origin === new URL(origin).origin) return origin; } catch { /* fall through */ }
+  }
+  return "http://localhost:3000";
 }
 
 export function postUrl(post: Post, origin: string): string {
