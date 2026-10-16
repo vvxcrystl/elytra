@@ -1,9 +1,15 @@
 import type { DatabaseSync } from "node:sqlite";
 import { migrateModerationResults } from "./moderation/migration";
 
-/** Counters replace repeated fan-out scans on popular posts. Triggers cover every writer. */
+/** Counters replace repeated fan-out scans on popular posts. Triggers cover every writer.
+ * This runs after the message-privacy rebuild, so it is the right home for message column adds. */
 export function migrateBackend(db: DatabaseSync): void {
   migrateModerationResults(db);
+  const messageColumns = db.prepare("PRAGMA table_info(messages)").all().map(c => c.name);
+  if (!messageColumns.includes("deleted")) {
+    // Deleted DMs stay behind as client-ID tombstones so a replayed signed envelope cannot recreate them.
+    db.exec("ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
+  }
   db.exec(`CREATE TABLE IF NOT EXISTS backend_migrations(id TEXT PRIMARY KEY);
     CREATE INDEX IF NOT EXISTS snapshots_viewer_time ON timeline_snapshots(viewer_id,created_at DESC,id DESC);
     CREATE INDEX IF NOT EXISTS snapshots_viewer_source ON timeline_snapshots(viewer_id,source,created_at DESC);

@@ -7,11 +7,11 @@ import { newId } from "../security";
 import { AppError } from "../errors";
 import { assertCanInteract } from "./safety";
 import { decodeCursor, encodeCursor, type PageOptions } from "./pagination";
-import type { EncryptedEnvelope } from "../../lib/e2ee-contract";
+import { DM_PROTOCOL, type EncryptedEnvelope } from "../../lib/e2ee-contract";
 import { validateEncryptedEnvelope } from "./encryption";
 
 type ConversationRow = { id: string; user_a: string; user_b: string; created_at: number; updated_at: number };
-type MessageRow = { seq: number; id: string; conversation_id: string; sender_id: string; envelope: string | null; legacy_removed: number; created_at: number };
+type MessageRow = { seq: number; id: string; conversation_id: string; sender_id: string; client_id: string | null; envelope: string | null; legacy_removed: number; deleted: number; created_at: number };
 function member(viewerId: string, id: string): ConversationRow {
   const row = one<ConversationRow>("SELECT * FROM conversations WHERE id=? AND (user_a=? OR user_b=?)", id, viewerId, viewerId);
   // Hide whether conversations belonging to other people exist.
@@ -38,13 +38,13 @@ function hydrateConversations(rows: ConversationRow[], viewerId: string): Conver
     EXISTS(SELECT 1 FROM blocks b WHERE b.user_id=u.id AND b.target_id=?) blocked_by,
     EXISTS(SELECT 1 FROM mutes m WHERE m.user_id=? AND m.target_id=u.id) muted
     FROM users u WHERE u.id IN (${placeholders(targets)})`, viewerId, viewerId, viewerId, ...targets).map(r => [r.id, r]));
-  const lastRows = all<MessageRow>(`SELECT m.* FROM messages m WHERE m.seq IN (
+  const lastRows = all<MessageRow>(`SELECT m.* FROM messages m WHERE m.deleted=0 AND m.seq IN (
     SELECT (SELECT seq FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1)
     FROM conversations c WHERE c.id IN (${placeholders(ids)}))`, ...ids);
   const last = new Map(hydrateMessages(lastRows, rows).map(m => [m.conversationId, m]));
   const unread = new Map(all<{ conversation_id: string; n: number }>(`SELECT m.conversation_id,COUNT(*) n FROM messages m
     LEFT JOIN conversation_reads r ON r.conversation_id=m.conversation_id AND r.user_id=?
-    WHERE m.conversation_id IN (${placeholders(ids)}) AND m.sender_id<>? AND m.seq>COALESCE(r.last_read_seq,0)
+    WHERE m.deleted=0 AND m.conversation_id IN (${placeholders(ids)}) AND m.sender_id<>? AND m.seq>COALESCE(r.last_read_seq,0)
     GROUP BY m.conversation_id`, viewerId, ...ids, viewerId).map(r => [r.conversation_id, r.n]));
   return rows.map(row => {
     const person = people.get(row.user_a === viewerId ? row.user_b : row.user_a)!;
@@ -77,7 +77,7 @@ export function conversationsFor(viewerId: string, options: PageOptions): Page<C
 export function messagesFor(viewerId: string, id: string, options: PageOptions): Page<Message> {
   const chat = member(viewerId, id);
   const scope = `messages:${viewerId}:${id}`, key = decodeCursor(options.cursor, scope, ["number"]);
-  const rows = all<MessageRow>(`SELECT * FROM messages WHERE conversation_id=? ${key ? "AND seq<?" : ""} ORDER BY seq DESC LIMIT ?`, id, ...(key ? [key[0]] : []), options.limit + 1);
+  const rows = all<MessageRow>(`SELECT * FROM messages WHERE conversation_id=? AND deleted=0 ${key ? "AND seq<?" : ""} ORDER BY seq DESC LIMIT ?`, id, ...(key ? [key[0]] : []), options.limit + 1);
   const selected = rows.slice(0, options.limit), last = selected.at(-1);
   return { items: hydrateMessages(selected, [chat]), nextCursor: rows.length > options.limit && last ? encodeCursor(scope, [last.seq]) : null };
 }
@@ -89,6 +89,9 @@ export function sendMessage(viewerId: string, id: string, encryption: EncryptedE
     const encoded = JSON.stringify(Object.fromEntries(["version", "clientId", "senderKeyId", "recipientKeyId", "ephemeralPublicKey", "salt", "recipientIv", "recipientCiphertext", "senderIv", "senderCiphertext", "signature"].map(k => [k, encryption[k as keyof EncryptedEnvelope]])));
     const existing = one<MessageRow>("SELECT * FROM messages WHERE conversation_id=? AND sender_id=? AND client_id=?", id, viewerId, encryption.clientId);
     if (existing) {
+      // Tombstones keep the row only as a client-ID record: replaying a deleted message's signed
+      // envelope must conflict, not resurrect it, while its ciphertext is gone from the server.
+      if (existing.deleted) throw new AppError(409, "message_conflict", "This message was already sent and deleted; send it again as a new message");
       if (existing.envelope !== encoded) throw new AppError(409, "message_conflict", "This client ID already belongs to another encrypted message");
       return message(existing);
     }
@@ -102,7 +105,7 @@ export function sendMessage(viewerId: string, id: string, encryption: EncryptedE
 }
 export function unreadMessageCount(viewerId: string): number {
   return one<{ n: number }>(`SELECT COUNT(*) AS n FROM messages m JOIN conversations c ON c.id=m.conversation_id
-    WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id<>?
+    WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id<>? AND m.deleted=0
     AND m.seq>COALESCE((SELECT r.last_read_seq FROM conversation_reads r WHERE r.conversation_id=c.id AND r.user_id=?),0)
     AND NOT EXISTS(SELECT 1 FROM mutes WHERE user_id=? AND target_id=m.sender_id)
     AND NOT EXISTS(SELECT 1 FROM blocks WHERE (user_id=? AND target_id=m.sender_id) OR (user_id=m.sender_id AND target_id=?))`, viewerId, viewerId, viewerId, viewerId, viewerId, viewerId, viewerId)!.n;
@@ -124,6 +127,10 @@ export function deleteMessage(viewerId: string, id: string): void {
       WHERE m.id=? AND (c.user_a=? OR c.user_b=?)`, id, viewerId, viewerId);
     if (!row) throw new AppError(404, "not_found", "Message not found");
     if (row.sender_id !== viewerId) throw new AppError(403, "forbidden", "You can only delete your own messages");
-    run("DELETE FROM messages WHERE id=?", id);
+    // Tombstone instead of delete: the (conversation,sender,client_id) unique guard has to survive,
+    // or a captured signed envelope could replay the message back into the conversation. The
+    // ciphertext is replaced with a version-only stub, satisfying the table check while leaving
+    // nothing decryptable on the server; every read path filters deleted=0.
+    run("UPDATE messages SET deleted=1,envelope=? WHERE id=?", JSON.stringify({ version: DM_PROTOCOL }), id);
   });
 }

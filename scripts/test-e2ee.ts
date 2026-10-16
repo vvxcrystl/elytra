@@ -8,7 +8,7 @@ import { DM_PROTOCOL, envelopeBytes, type IdentityBackup, type EncryptedEnvelope
 import { getDb } from "../src/server/db";
 import { createUser, one } from "../src/server/data/core";
 import { registerMessagingIdentity, messagingBackup } from "../src/server/data/encryption";
-import { createConversation, sendMessage, messagesFor } from "../src/server/data/messages";
+import { createConversation, sendMessage, messagesFor, deleteMessage, unreadMessageCount } from "../src/server/data/messages";
 
 process.env.ELYTRA_DB_PATH = ":memory:";
 const db = getDb(), directory = await mkdtemp(join(tmpdir(), "elytra-e2ee-"));
@@ -65,6 +65,23 @@ try {
     const unready = await createUser("crypto_unready", "Unready", "password123");
     const chat = createConversation(alice.id, unready.id).conversation;
     assert.throws(() => sendMessage(alice.id, chat.id, envelope));
+  });
+  await check("deleting a message leaves a replay-proof tombstone and keeps the inbox sane", async () => {
+    const doomed = await encryptText(a.identity, b.identity, context, "to delete");
+    sendMessage(alice.id, conversation.id, doomed);
+    const rowId = one<{ id: string }>("SELECT id FROM messages WHERE client_id=?", doomed.clientId)!.id;
+    const unreadBefore = unreadMessageCount(bob.id);
+    deleteMessage(alice.id, rowId);
+    assert(!messagesFor(bob.id, conversation.id, { cursor: null, limit: 50 }).items.some(m => m.id === rowId));
+    assert.equal(unreadMessageCount(bob.id), unreadBefore - 1);
+    // Replaying the captured signed envelope conflicts instead of resurrecting the message.
+    try { sendMessage(alice.id, conversation.id, { ...doomed }); assert.fail("replay must fail"); }
+    catch (error) { assert.equal((error as { status?: number }).status, 409); }
+    // The row remains only as a tombstone: ciphertext gone, client-ID guard intact.
+    const tombstone = one<{ deleted: number; envelope: string; legacy_removed: number; client_id: string }>("SELECT deleted,envelope,legacy_removed,client_id FROM messages WHERE id=?", rowId)!;
+    assert.equal(tombstone.deleted, 1); assert.equal(tombstone.legacy_removed, 0);
+    assert.equal(JSON.parse(tombstone.envelope).version, DM_PROTOCOL); assert(!tombstone.envelope.includes("to delete"));
+    assert.equal(tombstone.client_id, doomed.clientId);
   });
   await check("recovery is local; wrong code, modified backup, or another account cannot restore keys", async () => {
     const backup = messagingBackup(alice.id)!;
