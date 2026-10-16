@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { endpoints } from "./endpoints";
 import { openApiDocument } from "./openapi";
-import { credentials, checkOrigin, jsonBody, rateLimit, clientKey, type ApiContext } from "./http";
+import { credentials, checkOrigin, jsonBody, rateLimit, clientKey, sharedBucketScale, type ApiContext } from "./http";
 import { AppError } from "../errors";
 import { one } from "../data/core";
 import { sharedCapacity, type Capacity } from "../concurrency";
@@ -58,7 +58,10 @@ export async function handleApi(request: Request): Promise<Response> {
     checkOrigin(request, auth.bearer);
     const viewer = auth.viewer;
     if (selected?.endpoint.auth && !viewer) throw new AppError(401, "unauthorized", "Authentication required");
-    const limit = method === "GET" ? 600 : viewer ? 120 : 60;
+    const limit = viewer ? (method === "GET" ? 600 : 120)
+      // Anonymous clients without a trusted proxy header share one key; the ceiling there only
+      // catches floods, it must not be what a single spammer uses to 429 the whole site.
+      : (method === "GET" ? 600 : 60) * sharedBucketScale(request);
     const rate = rateLimit(`api:${viewer?.id ?? `anonymous:${clientKey(request)}`}:${method === "GET" ? "read" : "write"}`, limit, 60000);
     headers.set("RateLimit-Limit", String(limit)); headers.set("RateLimit-Remaining", String(rate.remaining)); headers.set("RateLimit-Reset", String(rate.reset));
     if (special) {

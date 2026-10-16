@@ -4,7 +4,7 @@ import { AppError } from "../errors";
 import { agentTokenViewer, viewerForToken } from "../data/core";
 import { backendConfig } from "../config";
 import type { PageOptions } from "../data/pagination";
-export { rateLimit, clientKey } from "../rate-limit";
+export { rateLimit, clientKey, sharedBucketScale, trackAuthAttempt, limitRegistration } from "../rate-limit";
 
 export type Field = { type: "string" | "boolean" | "integer" | "array" | "object"; required?: boolean; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; enum?: string[]; nullable?: boolean; maxItems?: number; items?: Field; fields?: Fields };
 export type Fields = Record<string, Field>;

@@ -13,7 +13,7 @@ import { createUpload, uploadById, type Upload } from "../data/uploads";
 import { removeImages } from "../media";
 import { transaction } from "../db";
 import { AppError } from "../errors";
-import { data, page, requiredViewer, pageOptions, stringValue, queryText, enumQuery, sessionCookie, rateLimit, clientKey, boundedBytes, idField, type ApiContext, type Fields } from "./http";
+import { data, page, requiredViewer, pageOptions, stringValue, queryText, enumQuery, sessionCookie, trackAuthAttempt, limitRegistration, boundedBytes, idField, type ApiContext, type Fields } from "./http";
 import { messagingIdentity, messagingBackup, registerMessagingIdentity } from "../data/encryption";
 import { DM_PROTOCOL, type EncryptedEnvelope, type IdentityRegistration } from "../../lib/e2ee-contract";
 
@@ -53,7 +53,7 @@ const envelopeFields: Fields = {
 };
 const endpoints: Endpoint[] = [
   { method: "POST", path: "/auth/register", summary: "Create an account and session", auth: false, body: { ...credentialsBody, password: { ...credentialsBody.password, minLength: 8 }, displayName: { type: "string", required: true, minLength: 1, maxLength: 50 }, aiOperated: { type: "boolean" } }, response: "AuthSession", status: 201, async handler(ctx) {
-    rateLimit(`registration:${clientKey(ctx.request)}`, 20, 60 * 60 * 1000);
+    limitRegistration(ctx.request);
     const username = stringValue(ctx.body, "username");
     if (userByUsername(username)) throw new AppError(409, "username_taken", "That username is already taken");
     const viewer = await createUser(username, stringValue(ctx.body, "displayName"), stringValue(ctx.body, "password"), ctx.body.aiOperated === true);
@@ -61,10 +61,11 @@ const endpoints: Endpoint[] = [
     return data(startSession(ctx, viewer), 201);
   } },
   { method: "POST", path: "/auth/login", summary: "Sign in and create a session", auth: false, body: credentialsBody, response: "AuthSession", async handler(ctx) {
-    rateLimit(`login:${clientKey(ctx.request)}`, 60, 60000);
-    rateLimit(`login:${stringValue(ctx.body, "username").toLowerCase()}`, 10, 15 * 60000);
-    const viewer = await authenticate(stringValue(ctx.body, "username"), stringValue(ctx.body, "password"));
-    if (!viewer) throw new AppError(401, "invalid_credentials", "Invalid username or password");
+    const username = stringValue(ctx.body, "username");
+    const attempt = trackAuthAttempt(ctx.request, username);
+    const viewer = await authenticate(username, stringValue(ctx.body, "password"));
+    if (!viewer) { attempt.throttleFailed(); throw new AppError(401, "invalid_credentials", "Invalid username or password"); }
+    attempt.clear();
     ctx.viewer = viewer;
     return data(startSession(ctx, viewer));
   } },

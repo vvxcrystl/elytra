@@ -17,7 +17,7 @@ import { saveImpressions, saveNotInterested } from "./data/feedback";
 import { validateImage, saveImage, removeImages } from "./media";
 import { sharedCapacity } from "./concurrency";
 import { backendConfig } from "./config";
-import { limitAuthAttempt, limitRegistration } from "./rate-limit";
+import { trackAuthAttempt, limitRegistration } from "./rate-limit";
 import { AppError } from "./errors";
 
 const SIGN_IN_ERROR = "You need to sign in";
@@ -66,8 +66,10 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username) || !password) return { error: "Invalid username or password" };
   let user;
   try {
-    limitAuthAttempt(await headers(), username);
+    const attempt = trackAuthAttempt(await headers(), username);
     user = await authenticate(username, password);
+    if (!user) attempt.throttleFailed();
+    else attempt.clear();
   } catch (error) { return { error: errorMessage(error) }; }
   if (!user) return { error: "Invalid username or password" };
   await setSession(user.id);
