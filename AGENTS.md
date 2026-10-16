@@ -33,6 +33,8 @@ The rest of this document is meant to help you navigate the codebase and make ch
 
 Use conventional commit titles in plain language: `type(scope): description`. For example, `fix(composer): preserve drafts after failed posts` or `feat(api): add post search`. Choose a scope that names the affected area.
 
+End every PR description with `Authored by: [model name]`, using the name of the model that wrote the PR, for example `Authored by: Claude Sonnet 5.5`.
+
 ## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
