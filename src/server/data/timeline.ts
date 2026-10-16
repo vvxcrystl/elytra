@@ -16,6 +16,8 @@ import { discoveryFilter } from "../moderation/worker";
 type Entry = { key: string; postId: string; reposterId: string | null };
 const empty = (): Page<FeedItem> => ({ items: [], nextCursor: null });
 const SNAPSHOT_AGE = 86400000;
+/** Other profiles expose only the five most recent likes; the owner and paginated history are not public. */
+const LIKES_PUBLIC_LIMIT = 5;
 export function validTimelineSource(value: unknown): value is TimelineSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const s = value as Record<string, unknown>;
@@ -37,6 +39,10 @@ function candidates(source: TimelineSource, viewerId: string | null): Entry[] {
   if (source.kind === "home" && source.tab === "for-you") return recommendedEntries(viewerId).slice(0, backendConfig().snapshotEntries);
   type Candidate = Entry & { time: number; score: number };
   let sql = "", args: (string | number | null)[] = [];
+  // Likes are the only tab with a public-history cap: anonymous or unrelated viewers get the
+  // five most recent, the owner browses everything, and no cursor can expose the rest.
+  const cap = source.kind === "user" && source.tab === "likes" && viewerId !== userByUsername(source.username)?.id
+    ? Math.min(LIKES_PUBLIC_LIMIT, backendConfig().snapshotEntries) : backendConfig().snapshotEntries;
   const postSelect = "SELECT 'post:' || p.id AS key,p.id AS postId,NULL AS reposterId,p.created_at AS time,0 AS score FROM posts p";
   const repostSelect = "SELECT 'repost:' || r.user_id || ':' || p.id AS key,p.id AS postId,r.user_id AS reposterId,r.created_at AS time,0 AS score FROM reposts r JOIN posts p ON p.id=r.post_id";
   if (source.kind === "home") {
@@ -78,7 +84,7 @@ function candidates(source: TimelineSource, viewerId: string | null): Entry[] {
     sql = `SELECT 'post:' || p.id AS key,p.id AS postId,NULL AS reposterId,p.created_at AS time,
       ${source.tab === "top" ? "(SELECT likes+2*reposts+replies FROM post_stats s WHERE s.post_id=p.id)" : "0"} AS score FROM posts p WHERE ${filter}`;
   }
-  return all<Candidate>(`SELECT * FROM (${sql}) ORDER BY ${source.kind === "search" && source.tab === "top" ? "score DESC," : ""}time DESC,key DESC LIMIT ?`, ...args, backendConfig().snapshotEntries).map(({ key, postId, reposterId }) => ({ key, postId, reposterId }));
+  return all<Candidate>(`SELECT * FROM (${sql}) ORDER BY ${source.kind === "search" && source.tab === "top" ? "score DESC," : ""}time DESC,key DESC LIMIT ?`, ...args, cap).map(({ key, postId, reposterId }) => ({ key, postId, reposterId }));
 }
 /** A snapshot (up to 24 hours, subject to the per-viewer retention budget) freezes event order, including search popularity, across load-more calls. */
 export function timeline(source: TimelineSource, cursor: string | null | undefined, viewerId: string | null, options: { limit?: number; strictCursor?: boolean } = {}): Page<FeedItem> {
