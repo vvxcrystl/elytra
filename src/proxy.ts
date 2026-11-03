@@ -12,7 +12,7 @@ function securityHeaders(nonce: string): Record<string, string> {
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${evaluation}`,
       // Inline style attributes render progress bars and similar; styling is not code execution.
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data:",
+      "img-src 'self' data: blob:",
       "font-src 'self'",
       "connect-src 'self'",
       "frame-ancestors 'none'",
