@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { ProfileImageCropDialog } from "./profile-image-crop-dialog";
 
 /** GIFs are always treated as animated. WebP is animated when its VP8X header sets the animation flag. */
@@ -20,13 +20,14 @@ export function useProfileImageUpload(kind: "avatar" | "banner") {
   const sourceUrl = source?.url;
   const imageUrl = image?.url;
   const [removed, setRemoved] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  // dragenter/dragleave also fire for child elements, so count them.
+  const dragDepth = useRef(0);
 
   useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl); }, [sourceUrl]);
   useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
 
-  async function selectImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  async function pickFile(file: File | undefined) {
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type)) {
       setError("Choose a PNG, JPEG, GIF, or WebP photo.");
@@ -47,10 +48,44 @@ export function useProfileImageUpload(kind: "avatar" | "banner") {
     setSource({ file, url: URL.createObjectURL(file) });
   }
 
+  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
+
   return {
     file: image?.file,
     preview: imageUrl,
-    selectImage,
+    selectImage(event: ChangeEvent<HTMLInputElement>) {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      return pickFile(file);
+    },
+    dragging,
+    /** Spread onto the element that should accept a dropped photo. */
+    dropProps: {
+      onDragEnter(e: DragEvent) {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current += 1;
+        setDragging(true);
+      },
+      onDragOver(e: DragEvent) {
+        if (!hasFiles(e)) return;
+        // Without this the browser refuses the drop.
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      },
+      onDragLeave(e: DragEvent) {
+        if (!hasFiles(e)) return;
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragging(false);
+      },
+      onDrop(e: DragEvent) {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDragging(false);
+        void pickFile(e.dataTransfer.files[0]);
+      },
+    },
     removed,
     clearImage() {
       setImage(null);
