@@ -25,6 +25,8 @@ import { timeline } from "../src/server/data/timeline";
 import { drainModeration, moderationPending, startModerationWorker, stopModerationWorker } from "../src/server/moderation/worker";
 
 process.env.ELYTRA_DB_PATH = ":memory:";
+// These checks use password accounts, so pick local accounts over the CrystlCloud default.
+process.env.ELYTRA_ACCOUNTS = "local";
 process.env.ELYTRA_SEED_DEMO = "false";
 process.env.ELYTRA_MODERATION = "false";
 process.env.ELYTRA_MODERATION_ENFORCEMENT = "off";

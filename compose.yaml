@@ -6,8 +6,9 @@ services:
     environment:
       ELYTRA_TRUSTED_IP_HEADER: cf-connecting-ip
       ELYTRA_PUBLIC_ORIGIN: ${ELYTRA_PUBLIC_ORIGIN:?Set ELYTRA_PUBLIC_ORIGIN in .env to your full HTTPS URL}
-      # Sign-in settings. The defaults keep local username and password accounts.
-      ELYTRA_ACCOUNTS: ${ELYTRA_ACCOUNTS:-local}
+      # Sign-in settings. CrystlCloud Accounts is the default and needs the client ID and secret;
+      # set ELYTRA_ACCOUNTS=local in .env for password accounts only.
+      ELYTRA_ACCOUNTS: ${ELYTRA_ACCOUNTS:-oidc}
       ELYTRA_OIDC_ISSUER: ${ELYTRA_OIDC_ISSUER:-}
       ELYTRA_OIDC_CLIENT_ID: ${ELYTRA_OIDC_CLIENT_ID:-}
       ELYTRA_OIDC_CLIENT_SECRET: ${ELYTRA_OIDC_CLIENT_SECRET:-}

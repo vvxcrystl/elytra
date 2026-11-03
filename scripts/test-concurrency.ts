@@ -20,6 +20,8 @@ import { passwordCapacity } from "../src/server/security";
 
 const directory = await mkdtemp(join(tmpdir(), "elytra-concurrency-"));
 Object.assign(process.env, {
+  // Password accounts, not the CrystlCloud default.
+  ELYTRA_ACCOUNTS: "local",
   ELYTRA_DB_PATH: join(directory, "test.db"), ELYTRA_UPLOAD_DIR: directory, ELYTRA_SEED_DEMO: "false",
   ELYTRA_API_CONCURRENCY: "4", ELYTRA_UPLOAD_CONCURRENCY: "2", ELYTRA_BODY_TIMEOUT_MS: "80",
   ELYTRA_PASSWORD_CONCURRENCY: "2", ELYTRA_PASSWORD_QUEUE: "4", ELYTRA_PASSWORD_WAIT_MS: "2000",

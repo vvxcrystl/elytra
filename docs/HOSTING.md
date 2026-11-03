@@ -47,51 +47,40 @@ For the dashboard flow and token management, see Cloudflare's [tunnel setup guid
 
 ## Choose how people sign in
 
-Elytra has two sign-in modes. Pick one with `ELYTRA_ACCOUNTS` in `.env`.
+By default, people sign in with CrystlCloud Accounts. Elytra won't start until you register it there, or until you choose local accounts instead.
 
-- `local` is the default. People create an account with a username and password on your Elytra.
-- `oidc` adds a "Continue with CrystlCloud" button. It works with CrystlCloud Accounts or any OpenID Connect provider that supports the authorization code flow with PKCE and a client secret.
+### CrystlCloud Accounts (default)
 
-### Local accounts
-
-Leave `ELYTRA_ACCOUNTS` unset, or set it to `local`. Nothing else is needed.
-
-### CrystlCloud Accounts or another OIDC provider
-
-1. Register Elytra with the provider. Its redirect URI is your public origin followed by `/api/oidc/callback`. For CrystlCloud Accounts, run this in the accounts server's directory:
+1. In the accounts server's directory, register Elytra. The redirect URI is your public origin followed by `/api/oidc/callback`:
 
    ```sh
    npm run client -- add Elytra https://twitter.somedomain.org/api/oidc/callback --owner you@example.com --uri https://twitter.somedomain.org
    ```
 
-   With Docker, replace `npm run client --` with `docker compose exec accounts node src/clients.ts`. The command prints the client ID and a secret. It shows the secret only once.
+   With Docker, replace `npm run client --` with `docker compose exec accounts node src/clients.ts`. The command prints a client ID and a secret, and shows the secret only once.
 
-2. Add these lines to `.env`:
+2. Add both to `.env`, then run `docker compose up -d`:
 
    ```dotenv
-   ELYTRA_ACCOUNTS=oidc
-   ELYTRA_OIDC_ISSUER=https://accounts.crystlcloud.org/api/auth
    ELYTRA_OIDC_CLIENT_ID=the-client-id
    ELYTRA_OIDC_CLIENT_SECRET=the-client-secret
    ```
 
-   The issuer must match the provider's `issuer` value exactly. For CrystlCloud Accounts it ends in `/api/auth`. Elytra reads `<issuer>/.well-known/openid-configuration` to find the other endpoints. `ELYTRA_PUBLIC_ORIGIN` is required in this mode, because Elytra builds the redirect URI from it.
+`ELYTRA_PUBLIC_ORIGIN` must be set, because Elytra builds the redirect URI from it. Password sign-in stays on, so existing users can sign in and connect their CrystlCloud account in Settings. Set `ELYTRA_PASSWORD_LOGIN=false` to allow only CrystlCloud. That hides the password form and sign-up page, and the `/auth/login` and `/auth/register` API calls return 403. Accounts that never connected can't sign in then.
 
-3. Optionally set `ELYTRA_OIDC_NAME` to change the name on the button. It defaults to `CrystlCloud`.
+To use a different OpenID Connect provider, also set `ELYTRA_OIDC_ISSUER` to its exact `issuer` value and `ELYTRA_OIDC_NAME` to the name for the button. The provider must support the authorization code flow with PKCE and a client secret.
 
-4. Run `docker compose up -d` to apply the change.
+### Local accounts
 
-Password sign-in stays on. Set `ELYTRA_PASSWORD_LOGIN=false` to allow only the provider. That hides the password form and the sign-up page, and the `/auth/login` and `/auth/register` API calls return 403. Accounts without a connected provider account can't sign in in that mode, so have existing users connect first.
+Set `ELYTRA_ACCOUNTS=local` to use only Elytra's own usernames and passwords. No other settings are needed, and there is no "Continue with" button.
 
-How accounts connect:
+### How accounts connect
 
-- Someone who signs in through the provider for the first time picks an Elytra username. Elytra never takes the username from their email. The display name starts as their provider name, and they can choose to use their provider photo as the avatar.
-- Someone who already has an Elytra account signs in with their password, opens Settings, and selects Connect next to "CrystlCloud account". After that, either sign-in method opens the same account.
+- Someone who signs in through CrystlCloud for the first time picks an Elytra username. Elytra never takes it from their email. The display name starts as their CrystlCloud name, and they can use their CrystlCloud photo as the avatar.
+- Someone with an existing Elytra account signs in with their password, opens Settings, and selects Connect next to "CrystlCloud account".
 - Elytra never connects two accounts because their email addresses match.
-- User IDs don't change, so posts, follows, and encrypted messages stay with the account. A new device still needs the messaging recovery code.
-- Signing out of Elytra doesn't sign you out of the provider.
-
-If the provider is unreachable, the sign-in page shows an error and password sign-in, when enabled, keeps working.
+- User IDs don't change, so posts, follows and encrypted messages stay with the account. A new device still needs the messaging recovery code.
+- Signing out of Elytra doesn't sign you out of CrystlCloud. If CrystlCloud is unreachable, the sign-in page shows an error and password sign-in keeps working.
 
 ## Manage the server
 
@@ -139,6 +128,7 @@ Set these variables before the app starts:
 
 - `ELYTRA_PUBLIC_ORIGIN` controls the REST API's origin checks for cookie-authenticated writes. Server Actions also verify the forwarded host. It is also the origin in the image and oEmbed URLs of post link previews.
 - `ELYTRA_SEED_DEMO=false` turns off demo seeding and the demo login hint. Set it for both the build and the start command.
+- `ELYTRA_OIDC_CLIENT_ID` and `ELYTRA_OIDC_CLIENT_SECRET` for CrystlCloud sign-in, or `ELYTRA_ACCOUNTS=local`. See [Choose how people sign in](#choose-how-people-sign-in).
 
 Post links (`/<username>/status/<id>`) render previews in Discord, Slack, and similar apps. The page serves OpenGraph tags with the author, text, and images, and `/api/oembed` adds the author line and the reply, repost, and like counts. Both are readable without signing in, so the crawler needs to reach them.
 

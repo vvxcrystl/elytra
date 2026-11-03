@@ -14,6 +14,8 @@ import type { Message } from "../src/lib/api-types";
 import { generateIdentity, encryptText, decryptText, type ClientIdentity } from "../src/lib/e2ee";
 
 process.env.ELYTRA_DB_PATH = ":memory:";
+// These checks use password accounts, so pick local accounts over the CrystlCloud default.
+process.env.ELYTRA_ACCOUNTS = "local";
 const directory = await mkdtemp(join(tmpdir(), "elytra-api-"));
 process.env.ELYTRA_UPLOAD_DIR = join(directory, "uploads");
 const db = getDb();

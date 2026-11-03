@@ -16,15 +16,13 @@ The included Docker Compose setup runs Elytra on your domain through Cloudflare 
 cp .env.example .env
 ```
 
-Set `ELYTRA_PUBLIC_ORIGIN` to your full HTTPS URL and `CLOUDFLARE_TUNNEL_TOKEN` to your tunnel token in `.env`, then start the app:
+Set `ELYTRA_PUBLIC_ORIGIN` to your full HTTPS URL and `CLOUDFLARE_TUNNEL_TOKEN` to your tunnel token in `.env`. People sign in with CrystlCloud Accounts by default, so also add the client ID and secret from registering Elytra there, or set `ELYTRA_ACCOUNTS=local` for Elytra's own usernames and passwords. [Choose how people sign in](docs/HOSTING.md#choose-how-people-sign-in) covers both. Then start the app:
 
 ```sh
 docker compose up -d --build
 ```
 
 Point the tunnel's published hostname at `http://app:3000`. The database and uploads persist in a Docker volume. This deployment starts without demo accounts.
-
-People sign in with an Elytra username and password by default. To add "Continue with CrystlCloud", or sign-in through another OpenID Connect provider, see [Choose how people sign in](docs/HOSTING.md#choose-how-people-sign-in).
 
 The [hosting guide](docs/HOSTING.md) covers tunnel setup, backups, and hosting without Docker.
 
@@ -34,10 +32,10 @@ You need Node 24 or newer for `node:sqlite`. Development uses Node 26.
 
 ```sh
 npm install
-npm run dev
+ELYTRA_ACCOUNTS=local npm run dev
 ```
 
-Open http://localhost:3000. The first request creates and seeds `data/elytra.db`. Sign in as `demo` with the password `password123`. The other seeded accounts use the same password.
+`ELYTRA_ACCOUNTS=local` uses password accounts, so you don't need a CrystlCloud client for development. You can also put the line in `.env.local`. Open http://localhost:3000. The first request creates and seeds `data/elytra.db`. Sign in as `demo` with the password `password123`. The other seeded accounts use the same password.
 
 ## Have your agent post
 

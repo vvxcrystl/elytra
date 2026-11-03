@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { getDb } from "../src/server/db";
 import { authenticate, createUser, one, run } from "../src/server/data/core";
 import { createUserFromSignup, linkIdentity, pendingSignup, userIdForIdentity } from "../src/server/data/identities";
-import { accountsConfig } from "../src/server/config";
+import { accountsConfig, CRYSTLCLOUD_ISSUER } from "../src/server/config";
 import { beginOidc, completeOidc } from "../src/server/oidc";
 
 // A fake issuer on a random local port stands in for CrystlCloud Accounts: discovery, JWKS,
@@ -118,19 +118,25 @@ try {
     assert.deepEqual(await signIn("sub-new"), { kind: "session", userId: robin.id });
   });
 
-  await check("config: local accounts by default, and OIDC settings are validated", () => {
+  await check("config: CrystlCloud by default, local accounts on request, and missing client credentials fail with the fix", () => {
     const saved = { ...process.env };
     try {
-      delete process.env.ELYTRA_ACCOUNTS;
+      delete process.env.ELYTRA_ACCOUNTS; delete process.env.ELYTRA_OIDC_ISSUER; delete process.env.ELYTRA_OIDC_NAME;
+      assert.deepEqual(accountsConfig().oidc, { issuer: CRYSTLCLOUD_ISSUER, clientId: "elytra-test", clientSecret: "s3cret", redirectUri: "http://localhost:4000/api/oidc/callback", name: "CrystlCloud" });
+      assert.equal(accountsConfig().passwordLogin, true);
+      process.env.ELYTRA_ACCOUNTS = "";
+      assert.equal(accountsConfig().oidc?.issuer, CRYSTLCLOUD_ISSUER, "an empty value from Compose means the default");
+      delete process.env.ELYTRA_OIDC_CLIENT_SECRET;
+      assert.throws(accountsConfig, (error: Error) => /ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required/.test(error.message)
+        && error.message.includes("npm run client -- add Elytra http://localhost:4000/api/oidc/callback") && error.message.includes("ELYTRA_ACCOUNTS=local"));
+      process.env.ELYTRA_ACCOUNTS = "local";
       assert.deepEqual(accountsConfig(), { passwordLogin: true, oidc: null });
       process.env.ELYTRA_PASSWORD_LOGIN = "false";
       assert.throws(accountsConfig, /needs ELYTRA_ACCOUNTS=oidc/);
-      process.env.ELYTRA_ACCOUNTS = "oidc";
+      process.env.ELYTRA_ACCOUNTS = "oidc"; process.env.ELYTRA_OIDC_CLIENT_SECRET = "s3cret";
       assert.equal(accountsConfig().passwordLogin, false);
       process.env.ELYTRA_OIDC_ISSUER = "http://accounts.example/api/auth";
       assert.throws(accountsConfig, /must use https/);
-      delete process.env.ELYTRA_OIDC_CLIENT_SECRET; process.env.ELYTRA_OIDC_ISSUER = issuer;
-      assert.throws(accountsConfig, /ELYTRA_OIDC_CLIENT_SECRET is required/);
     } finally { process.env = saved; }
   });
   console.log(`OIDC checks passed: ${checks} groups against a local fake issuer.`);

@@ -27,7 +27,8 @@ function readConfig() {
 export const backendConfig = () => config ??= readConfig();
 
 function choice<T extends string>(name: string, fallback: T, choices: readonly T[]): T {
-  const value = process.env[name] ?? fallback;
+  // Compose passes unset variables through as empty strings, so empty means "use the default".
+  const value = process.env[name] || fallback;
   if (!choices.includes(value as T)) throw new Error(`${name} must be one of: ${choices.join(", ")}`);
   return value as T;
 }
@@ -44,29 +45,35 @@ function httpUrl(name: string, value: string): URL {
   if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) throw new Error(`${name} must use https`);
   return url;
 }
-/** How people sign in. "local" is username and password only. "oidc" adds an OpenID Connect
- * issuer such as CrystlCloud Accounts, and can turn password sign-in off. Read on each call,
- * because tests change the environment between cases. */
+export const CRYSTLCLOUD_ISSUER = "https://accounts.crystlcloud.org/api/auth";
+/** How people sign in. "oidc", the default, signs in through CrystlCloud Accounts or another
+ * OpenID Connect issuer, with password sign-in still on unless turned off. "local" is Elytra's own
+ * usernames and passwords only. Read on each call, because tests change the environment between cases. */
 export function accountsConfig() {
-  const mode = choice("ELYTRA_ACCOUNTS", "local", ["local", "oidc"]);
+  const mode = choice("ELYTRA_ACCOUNTS", "oidc", ["local", "oidc"]);
   const passwordLogin = choice("ELYTRA_PASSWORD_LOGIN", "true", ["true", "false"]) === "true";
   if (mode === "local") {
     if (!passwordLogin) throw new Error("ELYTRA_PASSWORD_LOGIN=false needs ELYTRA_ACCOUNTS=oidc, or nobody could sign in");
     return { passwordLogin, oidc: null };
   }
-  const why = "when ELYTRA_ACCOUNTS=oidc";
-  const issuer = required("ELYTRA_OIDC_ISSUER", why);
+  const issuer = process.env.ELYTRA_OIDC_ISSUER || CRYSTLCLOUD_ISSUER;
   httpUrl("ELYTRA_OIDC_ISSUER", issuer);
-  const origin = httpUrl("ELYTRA_PUBLIC_ORIGIN", required("ELYTRA_PUBLIC_ORIGIN", why)).origin;
+  const publicOrigin = process.env.ELYTRA_PUBLIC_ORIGIN;
+  const callback = `${publicOrigin ? httpUrl("ELYTRA_PUBLIC_ORIGIN", publicOrigin).origin : "https://<your Elytra domain>"}/api/oidc/callback`;
+  const clientId = process.env.ELYTRA_OIDC_CLIENT_ID, clientSecret = process.env.ELYTRA_OIDC_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(`ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required: ELYTRA_ACCOUNTS is oidc (the default), so Elytra signs in through ${issuer}. ` +
+      `Register Elytra with CrystlCloud Accounts by running \`npm run client -- add Elytra ${callback} --owner <your email>\` in the accounts server, ` +
+      "then set both values from its output. To use only Elytra's own usernames and passwords instead, set ELYTRA_ACCOUNTS=local.");
+  }
+  // The redirect URI must match the registered one exactly, so it can't fall back to request headers.
+  const redirectUri = `${httpUrl("ELYTRA_PUBLIC_ORIGIN", required("ELYTRA_PUBLIC_ORIGIN", "when signing in through an OIDC issuer")).origin}/api/oidc/callback`;
   return {
     passwordLogin,
     oidc: {
       // Kept exactly as written: it must equal the provider's `iss` claim character for character.
-      issuer,
-      clientId: required("ELYTRA_OIDC_CLIENT_ID", why),
-      clientSecret: required("ELYTRA_OIDC_CLIENT_SECRET", why),
+      issuer, clientId, clientSecret, redirectUri,
       name: process.env.ELYTRA_OIDC_NAME || "CrystlCloud",
-      redirectUri: `${origin}/api/oidc/callback`,
     },
   };
 }
