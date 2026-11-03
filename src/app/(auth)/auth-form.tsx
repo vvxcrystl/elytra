@@ -133,16 +133,6 @@ export function AuthForm({
             {notice}
           </p>
         )}
-        {oidcName && mode !== "finish" && (
-          <form action={continueWithOidc}>
-            <button type="submit" className="btn-outline h-[52px] w-full text-[17px]">
-              Continue with {oidcName}
-            </button>
-          </form>
-        )}
-        {oidcName && showForm && mode !== "finish" && (
-          <p className="my-5 text-center text-[13px] text-fg-subtle">or use your Elytra username</p>
-        )}
         {showForm && (
           <>
             {/* `action` covers submits before hydration. After hydration onSubmit takes over so
@@ -217,9 +207,20 @@ export function AuthForm({
                 <span className="font-mono text-fg">password123</span>
               </p>
             )}
-            {passwordLogin && <p className="mt-8 text-center text-[15px] text-fg-muted">{config.footer}</p>}
           </>
         )}
+        {/* The issuer button sits below the password form, or stands alone when passwords are off. */}
+        {oidcName && mode !== "finish" && (
+          <>
+            {showForm && <p className="my-5 text-center text-[13px] text-fg-subtle">or</p>}
+            <form action={continueWithOidc}>
+              <button type="submit" className="btn-outline h-[52px] w-full text-[17px]">
+                Continue with {oidcName}
+              </button>
+            </form>
+          </>
+        )}
+        {passwordLogin && <p className="mt-8 text-center text-[15px] text-fg-muted">{config.footer}</p>}
       </div>
     </ViewTransition>
   );
