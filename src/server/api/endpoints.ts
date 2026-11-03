@@ -13,6 +13,8 @@ import { createUpload, uploadById, type Upload } from "../data/uploads";
 import { removeImages } from "../media";
 import { transaction } from "../db";
 import { AppError } from "../errors";
+import { accountsConfig } from "../config";
+import { pushProfileLater } from "../oidc";
 import { data, page, requiredViewer, pageOptions, stringValue, queryText, enumQuery, sessionCookie, trackAuthAttempt, limitRegistration, boundedBytes, idField, type ApiContext, type Fields } from "./http";
 import { messagingIdentity, messagingBackup, registerMessagingIdentity } from "../data/encryption";
 import { DM_PROTOCOL, type EncryptedEnvelope, type IdentityRegistration } from "../../lib/e2ee-contract";
@@ -41,6 +43,9 @@ function startSession(ctx: ApiContext, viewer: { id: string; username: string })
   ctx.headers.set("Set-Cookie", sessionCookie(session.token, SESSION_AGE, session.expires));
   return { user: profile(ctx, userByUsername(viewer.username)), accessToken: session.token, tokenType: "Bearer", expiresAt: session.expires.toISOString() };
 }
+function requirePasswordLogin() {
+  if (!accountsConfig().passwordLogin) throw new AppError(403, "password_login_disabled", "Password sign-in is turned off on this server");
+}
 const credentialsBody: Fields = {
   username: { type: "string", required: true, pattern: "^[A-Za-z0-9_]{3,15}$", minLength: 3, maxLength: 15 },
   password: { type: "string", required: true, minLength: 1, maxLength: 1024 },
@@ -53,6 +58,7 @@ const envelopeFields: Fields = {
 };
 const endpoints: Endpoint[] = [
   { method: "POST", path: "/auth/register", summary: "Create an account and session", auth: false, body: { ...credentialsBody, password: { ...credentialsBody.password, minLength: 8 }, displayName: { type: "string", required: true, minLength: 1, maxLength: 50 }, aiOperated: { type: "boolean" } }, response: "AuthSession", status: 201, async handler(ctx) {
+    requirePasswordLogin();
     limitRegistration(ctx.request);
     const username = stringValue(ctx.body, "username");
     if (userByUsername(username)) throw new AppError(409, "username_taken", "That username is already taken");
@@ -61,6 +67,7 @@ const endpoints: Endpoint[] = [
     return data(startSession(ctx, viewer), 201);
   } },
   { method: "POST", path: "/auth/login", summary: "Sign in and create a session", auth: false, body: credentialsBody, response: "AuthSession", async handler(ctx) {
+    requirePasswordLogin();
     const username = stringValue(ctx.body, "username");
     const attempt = trackAuthAttempt(ctx.request, username);
     const viewer = await authenticate(username, stringValue(ctx.body, "password"));
@@ -103,7 +110,7 @@ const endpoints: Endpoint[] = [
       avatarMediaId: ctx.body.avatarMediaId as string | undefined, bannerMediaId: ctx.body.bannerMediaId as string | undefined,
       avatarUrl: ctx.body.removeAvatar ? null : undefined, bannerUrl: ctx.body.removeBanner ? null : undefined });
     });
-    await removeImages(obsolete); return data(profile(ctx, userByUsername(viewer.username)));
+    await removeImages(obsolete); pushProfileLater(viewer.id); return data(profile(ctx, userByUsername(viewer.username)));
   } },
   { method: "GET", path: "/users/me/agent-tokens", summary: "List your agent tokens, marking the one making this request", auth: true, response: "AgentTokenArray", handler: ctx => data(listAgentTokens(requiredViewer(ctx).id, ctx.token)) },
   { method: "POST", path: "/users/me/agent-tokens", summary: "Create a long-lived, revocable agent token; the secret is shown once", auth: true, response: "AgentTokenSecret", status: 201, body: {

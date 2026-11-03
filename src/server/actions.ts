@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { ActionResult, AgentToken, FormState, TimelineSource, Page, FeedItem } from "@/lib/types";
 import { POST_MAX_IMAGES, POST_MAX_LENGTH } from "../lib/types";
-import { getViewer } from "./auth";
+import { getViewer, setSession } from "./auth";
 import { getTimeline } from "./queries";
-import { authenticate, createUser, createSession, deleteSession, setAiOperated, userByUsername, SESSION_AGE, RESERVED_USERNAMES } from "./data/core";
+import { authenticate, createUser, deleteSession, setAiOperated, userByUsername, usernameProblem } from "./data/core";
 import { createAgentToken, revokeAgentToken } from "./data/agent-tokens";
 import { removePost, togglePostInteraction } from "./data/posts";
 import { publishPost } from "./moderation/publication";
@@ -16,11 +16,14 @@ import { validTimelineSource } from "./data/timeline";
 import { saveImpressions, saveNotInterested } from "./data/feedback";
 import { validateImage, saveImage, removeImages } from "./media";
 import { sharedCapacity } from "./concurrency";
-import { backendConfig } from "./config";
-import { trackAuthAttempt, limitRegistration } from "./rate-limit";
+import { accountsConfig, backendConfig } from "./config";
+import { trackAuthAttempt, limitRegistration, limitOidcStart } from "./rate-limit";
+import { beginOidc, fetchPicture, pushProfileLater, SIGNUP_COOKIE, STATE_COOKIE } from "./oidc";
+import { createUserFromSignup, pendingSignup } from "./data/identities";
 import { AppError } from "./errors";
 
 const SIGN_IN_ERROR = "You need to sign in";
+const PASSWORD_OFF = "Password sign-in is turned off on this server";
 const refresh = () => revalidatePath("/", "layout");
 const text = (form: FormData, name: string) => { const value = form.get(name); return typeof value === "string" ? value : ""; };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong";
@@ -31,20 +34,14 @@ function optionalId(form: FormData, name: string): string | null {
   if (!validId(value)) throw new Error("Invalid post ID");
   return value;
 }
-async function setSession(userId: string): Promise<void> {
-  const jar = await cookies();
-  const previous = jar.get("elytra_session")?.value;
-  const session = createSession(userId);
-  if (previous) deleteSession(previous);
-  jar.set("elytra_session", session.token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: SESSION_AGE, expires: session.expires });
-}
 export async function signUp(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (!accountsConfig().passwordLogin) return { error: PASSWORD_OFF };
   if (!(formData instanceof FormData)) return { error: "Invalid form" };
   // The display name starts as the username; onboarding at /welcome lets the user change it.
   const username = text(formData, "username").trim().replace(/^@/, ""), password = text(formData, "password");
   const fieldErrors: Record<string, string> = {};
-  if (!/^[A-Za-z0-9_]{3,15}$/.test(username)) fieldErrors.username = "Use 3–15 letters, numbers, or underscores";
-  else if (RESERVED_USERNAMES.has(username.toLowerCase())) fieldErrors.username = "That username isn't available";
+  const problem = usernameProblem(username);
+  if (problem) fieldErrors.username = problem;
   else if (userByUsername(username)) fieldErrors.username = "That username is already taken";
   if (password.length < 8) fieldErrors.password = "Password must be at least 8 characters";
   if (Object.keys(fieldErrors).length) return { fieldErrors };
@@ -61,6 +58,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   redirect("/welcome");
 }
 export async function signIn(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (!accountsConfig().passwordLogin) return { error: PASSWORD_OFF };
   if (!(formData instanceof FormData)) return { error: "Invalid username or password" };
   const username = text(formData, "username").trim(), password = text(formData, "password");
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username) || !password) return { error: "Invalid username or password" };
@@ -75,6 +73,67 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   await setSession(user.id);
   refresh();
   redirect("/home");
+}
+async function redirectToIssuer(linkUserId: string | null): Promise<never> {
+  const config = accountsConfig().oidc, back = linkUserId ? "/settings" : "/login";
+  if (!config) redirect(back);
+  let url: string;
+  try {
+    limitOidcStart(await headers());
+    const started = await beginOidc(config, linkUserId);
+    // Lax so the cookie comes back on the provider's top-level redirect to the callback.
+    (await cookies()).set(STATE_COOKIE, started.state, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/oidc", maxAge: 600 });
+    url = started.url;
+  } catch (error) {
+    console.error("Unable to start OIDC sign-in", error);
+    redirect(`${back}?oidc=${error instanceof AppError && error.code === "rate_limited" ? "busy" : "provider"}`);
+  }
+  redirect(url);
+}
+/** "Sign in with CrystlCloud" on the sign-in page, and "Sign up with" on the sign-up page. */
+export async function signInWithOidc(): Promise<void> { await redirectToIssuer(null); }
+/** Settings: connect the signed-in account to an issuer account. */
+export async function connectOidcAccount(): Promise<void> {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/login");
+  await redirectToIssuer(viewer.id);
+}
+/** First sign-in through the issuer: the person picks their Elytra username here. */
+export async function finishOidcSignup(_prev: FormState, formData: FormData): Promise<FormState> {
+  const config = accountsConfig().oidc;
+  if (!config) return { error: "Sign-in with an account service is turned off" };
+  if (!(formData instanceof FormData)) return { error: "Invalid form" };
+  const jar = await cookies(), token = jar.get(SIGNUP_COOKIE)?.value ?? "";
+  const identity = pendingSignup(token);
+  if (!identity) return { error: "This sign-in expired. Go back and continue again." };
+  const username = text(formData, "username").trim().replace(/^@/, ""), displayName = text(formData, "displayName").trim();
+  const fieldErrors: Record<string, string> = {};
+  const problem = usernameProblem(username);
+  if (problem) fieldErrors.username = problem;
+  else if (userByUsername(username)) fieldErrors.username = "That username is already taken";
+  if (!displayName || [...displayName].length > 50) fieldErrors.displayName = "Display name must be 1–50 characters";
+  if (Object.keys(fieldErrors).length) return { fieldErrors };
+  let avatarUrl: string | null = null, id: string;
+  try {
+    limitRegistration(await headers());
+    // Fetch the photo before the transaction; a missing or invalid photo only skips it.
+    if (identity.picture && text(formData, "usePicture") === "1") {
+      const file = await fetchPicture(config, identity.picture);
+      if (file) avatarUrl = await validateImage(file).then(saveImage).catch(() => null);
+    }
+    id = createUserFromSignup(token, { username, displayName, aiOperated: text(formData, "aiOperated") === "1", avatarUrl }).id;
+  } catch (error) {
+    if (avatarUrl) await removeImages([avatarUrl]);
+    if (error instanceof AppError && error.code === "moderated_name") return { error: error.message };
+    if (error instanceof AppError && error.code === "username_taken") return { fieldErrors: { username: error.message } };
+    if (error instanceof AppError) return { error: error.message };
+    console.error("Unable to create account", error);
+    return { error: "Unable to create your account. Please try again." };
+  }
+  jar.delete({ name: SIGNUP_COOKIE, path: "/signup" });
+  await setSession(id);
+  refresh();
+  redirect("/welcome");
 }
 export async function signOut(): Promise<void> {
   const jar = await cookies(), token = jar.get("elytra_session")?.value;
@@ -195,6 +254,7 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
   finally { release?.(); }
   await removeImages(obsolete);
+  pushProfileLater(viewer.id);
   refresh();
   return { success: true };
 }
@@ -251,6 +311,7 @@ export async function saveOnboardingProfile(_prev: FormState, formData: FormData
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
   finally { release?.(); }
   await removeImages(obsolete);
+  pushProfileLater(viewer.id);
   refresh();
   return { success: true };
 }

@@ -9,6 +9,8 @@ export function maintainDatabase(db: DatabaseSync, now = Date.now()): void {
     ["sessions", "expires_at", now],
     ["agent_tokens", "expires_at", now],
     ["api_rate_limits", "reset_at", now],
+    ["oidc_requests", "expires_at", now],
+    ["oidc_signups", "expires_at", now],
     ["timeline_snapshots", "created_at", now - 86400000],
   ] as const) {
     db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${column}<=? LIMIT 500)`).run(cutoff);

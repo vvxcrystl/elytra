@@ -67,3 +67,5 @@ export function trackAuthAttempt(source: Request | Headers, username: string): A
   };
 }
 export function limitRegistration(source: Request | Headers): void { rateLimit(`registration:${clientKey(source)}`, 20 * sharedBucketScale(source), 3600000); }
+/** Each start writes a short-lived row, so cap how fast one client can make them. */
+export function limitOidcStart(source: Request | Headers): void { rateLimit(`oidc:${clientKey(source)}`, 30 * sharedBucketScale(source), 60000); }

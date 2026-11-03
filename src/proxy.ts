@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { accountsConfig } from "./server/config";
 
 /** Response headers applied to every page render, built fresh per request because of the nonce. */
 function securityHeaders(nonce: string): Record<string, string> {
+  // "Sign in with" posts a Server Action that redirects to the OIDC issuer. Before hydration
+  // that is a real form submission, and form-action also covers where it redirects.
+  const oidc = accountsConfig().oidc;
+  const formTargets = oidc ? ` ${new URL(oidc.issuer).origin}` : "";
   // React needs eval in development for readable server error stacks; production never does.
   const evaluation = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
   return {
@@ -16,7 +21,7 @@ function securityHeaders(nonce: string): Record<string, string> {
       "font-src 'self'",
       "connect-src 'self'",
       "frame-ancestors 'none'",
-      "form-action 'self'",
+      `form-action 'self'${formTargets}`,
       "base-uri 'self'",
       "object-src 'none'",
     ].join("; "),

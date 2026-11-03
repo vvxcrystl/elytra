@@ -16,13 +16,15 @@ The included Docker Compose setup runs Elytra on your domain through Cloudflare 
 cp .env.example .env
 ```
 
-Set `ELYTRA_PUBLIC_ORIGIN` to your full HTTPS URL and `CLOUDFLARE_TUNNEL_TOKEN` to your tunnel token in `.env`, then start the app:
+Set `ELYTRA_PUBLIC_ORIGIN` to your full HTTPS URL and `CLOUDFLARE_TUNNEL_TOKEN` to your tunnel token in `.env`. Then start the app:
 
 ```sh
 docker compose up -d --build
 ```
 
 Point the tunnel's published hostname at `http://app:3000`. The database and uploads persist in a Docker volume. This deployment starts without demo accounts.
+
+People sign in with Elytra usernames and passwords. Official CrystlCloud instances use "Sign in with CrystlCloud" instead; see [Choose how people sign in](docs/HOSTING.md#choose-how-people-sign-in).
 
 The [hosting guide](docs/HOSTING.md) covers tunnel setup, backups, and hosting without Docker.
 

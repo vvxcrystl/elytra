@@ -38,6 +38,25 @@ export function migrateBackend(db: DatabaseSync): void {
       PRIMARY KEY(post_id,user_id,kind)
     );
     CREATE INDEX IF NOT EXISTS post_visits_user ON post_visits(user_id);
+    -- Sign-in through an OpenID Connect issuer. A link maps the issuer's stable subject to an
+    -- existing user ID, so user IDs and everything keyed by them stay the same.
+    CREATE TABLE IF NOT EXISTS identity_links (
+      issuer TEXT NOT NULL, subject TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at INTEGER NOT NULL,
+      PRIMARY KEY(issuer,subject), UNIQUE(user_id,issuer)
+    );
+    -- One row per sign-in started. The browser keeps the state in a cookie; the verifier and nonce stay here.
+    CREATE TABLE IF NOT EXISTS oidc_requests (
+      state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL, nonce TEXT NOT NULL,
+      link_user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL
+    );
+    -- A verified identity with no account yet, waiting for its owner to pick a username.
+    CREATE TABLE IF NOT EXISTS oidc_signups (
+      token_hash TEXT PRIMARY KEY, issuer TEXT NOT NULL, subject TEXT NOT NULL,
+      name TEXT NOT NULL, picture TEXT, expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS oidc_requests_expiry ON oidc_requests(expires_at);
+    CREATE INDEX IF NOT EXISTS oidc_signups_expiry ON oidc_signups(expires_at);
     CREATE INDEX IF NOT EXISTS moderation_item ON moderation_results(item_id,item_type,created_at DESC);
     CREATE TABLE IF NOT EXISTS moderation_jobs (
       id INTEGER PRIMARY KEY, revision TEXT NOT NULL UNIQUE, item_id TEXT NOT NULL, item_type TEXT NOT NULL,
@@ -102,6 +121,15 @@ export function migrateBackend(db: DatabaseSync): void {
       DELETE FROM moderation_jobs WHERE item_id=OLD.id AND item_type IN ('username','display_name','bio');
       DELETE FROM moderation_results WHERE item_id=OLD.id AND item_type IN ('username','display_name','bio');
     END;`);
+  // What Elytra last copied from the issuer's profile: its name, its picture URL, and the local
+  // avatar file made from that picture. Sign-in copies a value again only after the issuer's changes.
+  const linkColumns = db.prepare("PRAGMA table_info(identity_links)").all().map(c => c.name);
+  // refresh_token (sealed with the client secret) lets page loads pick up profile changes from the
+  // issuer and, when it offers profile:write, lets Elytra send profile edits back.
+  for (const column of ["synced_name", "synced_picture", "synced_avatar_url", "refresh_token"]) {
+    if (!linkColumns.includes(column)) db.exec(`ALTER TABLE identity_links ADD COLUMN ${column} TEXT`);
+  }
+  if (!db.prepare("PRAGMA table_info(oidc_signups)").all().some(c => c.name === "refresh_token")) db.exec("ALTER TABLE oidc_signups ADD COLUMN refresh_token TEXT");
   const overrideColumns = db.prepare("PRAGMA table_info(moderation_slur_overrides)").all().map(c => c.name);
   if (!overrideColumns.includes("reject_publish")) db.exec("ALTER TABLE moderation_slur_overrides ADD COLUMN reject_publish INTEGER NOT NULL DEFAULT 0 CHECK(reject_publish IN (0,1))");
   // Databases created before post analytics lack the view counters.

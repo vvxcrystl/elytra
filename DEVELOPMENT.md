@@ -28,6 +28,7 @@ Use `npm run build` for a production build and `npm start` to serve it. The buil
 | `npm run test:backend` | Runs the data-layer integration checks against an in-memory database |
 | `npm run test:api` | Tests every REST operation and security boundary with isolated data and uploads |
 | `npm run test:e2ee` | Checks encryption, tamper rejection, key recovery, and plaintext erasure |
+| `npm run test:oidc` | Checks OIDC sign-in, account linking, and first-sign-in usernames against a local fake issuer |
 | `npm run test:concurrency` | Tests overload recovery, body deadlines, concurrent writes, retention, and streaming with isolated files |
 | `npm run test:moderation` | Tests slur matching/spans, name policy, scoring, guard failures, durable jobs, and reversible actions |
 | `npm run bench:moderation` | Measures local slur, linear, and guard latency/throughput; reports an unavailable guard explicitly |

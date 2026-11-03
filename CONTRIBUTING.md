@@ -19,6 +19,7 @@ Run `npm run lint` and `npm run typecheck` for code changes. Choose tests for th
 - `npm run test:backend` for data access and database behavior.
 - `npm run test:api` for HTTP endpoints, MCP tools, and access controls.
 - `npm run test:e2ee` for encrypted messaging.
+- `npm run test:oidc` for sign-in through an OpenID Connect issuer.
 - `npm run test:concurrency` for admission limits and overload handling.
 - `npm run test:moderation` for moderation policy and processing.
 - `npm run test:markdown` for post formatting.

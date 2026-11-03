@@ -45,6 +45,43 @@ The Docker setup starts with an empty database and turns off demo seeding. Local
 
 For the dashboard flow and token management, see Cloudflare's [tunnel setup guide](https://developers.cloudflare.com/tunnel/get-started/) and [token documentation](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/).
 
+## Choose how people sign in
+
+Self-hosted Elytra uses its own usernames and passwords, and needs no sign-in settings. Official CrystlCloud instances use "Sign in with CrystlCloud" instead.
+
+### CrystlCloud instances
+
+1. In the accounts server's directory, register Elytra. The redirect URI is your public origin followed by `/api/oidc/callback`:
+
+   ```sh
+   npm run client -- add Elytra https://twitter.somedomain.org/api/oidc/callback --owner you@example.com --uri https://twitter.somedomain.org
+   ```
+
+   With Docker, replace `npm run client --` with `docker compose exec accounts node src/clients.ts`. The command prints a client ID and a secret, and shows the secret only once.
+
+2. Add these to `.env`, then run `docker compose up -d`:
+
+   ```dotenv
+   ELYTRA_ACCOUNTS=oidc
+   ELYTRA_OIDC_CLIENT_ID=the-client-id
+   ELYTRA_OIDC_CLIENT_SECRET=the-client-secret
+   ```
+
+The issuer defaults to `https://accounts.crystlcloud.org/api/auth`. `ELYTRA_PUBLIC_ORIGIN` must be set, because Elytra builds the redirect URI from it. If the client ID or secret is missing, Elytra stops at startup and says how to fix it.
+
+The sign-in page leads with "Sign in with CrystlCloud". Password sign-in stays available under "Legacy sign-in", so people with older accounts can sign in and connect CrystlCloud in Settings. Set `ELYTRA_PASSWORD_LOGIN=false` to turn it off. That also hides the sign-up page, and the `/auth/login` and `/auth/register` API calls return 403. Accounts that never connected can't sign in then.
+
+To use a different OpenID Connect provider, also set `ELYTRA_OIDC_ISSUER` to its exact `issuer` value and `ELYTRA_OIDC_NAME` to the name for the button. The provider must support the authorization code flow with PKCE and a client secret.
+
+### How accounts connect
+
+- Someone who signs in through CrystlCloud for the first time picks an Elytra username. Elytra never takes it from their email. The display name starts as their CrystlCloud name, and they can use their CrystlCloud photo as the avatar.
+- Someone with an existing Elytra account signs in with their password, opens Settings, and selects Connect next to "CrystlCloud account".
+- Elytra never connects two accounts because their email addresses match.
+- The display name and profile photo stay the same in Elytra and CrystlCloud. Changes made in CrystlCloud show up the next time you load an Elytra page. Elytra checks CrystlCloud at most every 5 seconds per person, and waits up to 3 seconds before showing the page without them. Name and photo edits made in Elytra are sent to CrystlCloud right away. GIF photos and photos over 1 MB stay in Elytra only. Sending edits needs a CrystlCloud Accounts version with the `profile:write` scope, and each person signs in with CrystlCloud once after it's added.
+- User IDs don't change, so posts, follows and encrypted messages stay with the account. A new device still needs the messaging recovery code.
+- Signing out of Elytra doesn't sign you out of CrystlCloud. If CrystlCloud is unreachable, the sign-in page shows an error and password sign-in keeps working.
+
 ## Manage the server
 
 ```sh
@@ -91,6 +128,7 @@ Set these variables before the app starts:
 
 - `ELYTRA_PUBLIC_ORIGIN` controls the REST API's origin checks for cookie-authenticated writes. Server Actions also verify the forwarded host. It is also the origin in the image and oEmbed URLs of post link previews.
 - `ELYTRA_SEED_DEMO=false` turns off demo seeding and the demo login hint. Set it for both the build and the start command.
+- On official CrystlCloud instances, `ELYTRA_ACCOUNTS=oidc` with `ELYTRA_OIDC_CLIENT_ID` and `ELYTRA_OIDC_CLIENT_SECRET`. See [Choose how people sign in](#choose-how-people-sign-in).
 
 Post links (`/<username>/status/<id>`) render previews in Discord, Slack, and similar apps. The page serves OpenGraph tags with the author, text, and images, and `/api/oembed` adds the author line and the reply, repost, and like counts. Both are readable without signing in, so the crawler needs to reach them.
 

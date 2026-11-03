@@ -11,7 +11,7 @@ The API shares the website's database, sessions, notifications, and feed ranking
 
 ## Authentication
 
-`POST /auth/register` takes `username`, `displayName`, and `password`. `POST /auth/login` takes `username` and `password`. Both return:
+`POST /auth/register` takes `username`, `displayName`, and `password`. `POST /auth/login` takes `username` and `password`. When the operator turns password sign-in off (`ELYTRA_PASSWORD_LOGIN=false`, see the [hosting guide](HOSTING.md#choose-how-people-sign-in)), both return 403 `password_login_disabled`. People then sign in through the browser, and agents use tokens from Settings. Otherwise both return:
 
 ```json
 {
