@@ -116,6 +116,100 @@ export function AuthForm({
   const errors = state?.fieldErrors ?? {};
 
   const other = mode === "login" ? "signup" : "login";
+  // On sign-in with an issuer, the issuer is the main path and passwords fold under "Legacy sign-in".
+  const legacy = mode === "login" && !!oidcName && passwordLogin;
+
+  const issuerButton = oidcName && mode !== "finish" && (
+    <form action={signInWithOidc}>
+      <button
+        type="submit"
+        className={clsx("h-[52px] w-full text-[17px]", legacy || !showForm ? "btn-primary shadow-lg shadow-accent/20" : "btn-outline")}
+      >
+        {mode === "signup" ? "Sign up" : "Sign in"} with {oidcName}
+      </button>
+    </form>
+  );
+
+  const passwordSection = (
+    <>
+      {/* `action` covers submits before hydration. After hydration onSubmit takes over so
+          React keeps the typed values when validation fails. */}
+      <form
+        action={action}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const data = new FormData(e.currentTarget);
+          startTransition(() => action(data));
+        }}
+        className="flex flex-col gap-5"
+        noValidate
+      >
+        {state?.error && (
+          <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+            {state.error}
+          </p>
+        )}
+        {config.fields.map((field: Field) => (
+          <label key={field.name} className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-fg-muted">{field.label}</span>
+            <span className="relative block">
+              {field.name === "username" && (
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[15px] text-fg-subtle">
+                  @
+                </span>
+              )}
+              <input
+                name={field.name}
+                defaultValue={defaults[field.name]}
+                type={field.type ?? "text"}
+                autoComplete={field.autoComplete}
+                aria-invalid={!!errors[field.name]}
+                autoCapitalize="none"
+                spellCheck={false}
+                className={clsx(
+                  "input bg-bg/60 aria-invalid:border-danger dark:bg-white/[0.04]",
+                  field.name === "username" && "pl-7",
+                )}
+              />
+            </span>
+            {errors[field.name] ? (
+              <span className="mt-1 block text-sm text-danger">{errors[field.name]}</span>
+            ) : (
+              field.hint && <span className="mt-1 block text-[13px] text-fg-subtle">{field.hint}</span>
+            )}
+          </label>
+        ))}
+        {mode === "finish" && picture && (
+          <label className="flex cursor-pointer items-start gap-3 text-[15px]">
+            <input name="usePicture" type="checkbox" value="1" defaultChecked className="mt-0.5 size-4 shrink-0 accent-accent" />
+            <span>Use my {oidcName} photo</span>
+          </label>
+        )}
+        {mode !== "login" && (
+          <label className="flex cursor-pointer items-start gap-3 text-[15px]">
+            <input name="aiOperated" type="checkbox" value="1" className="mt-0.5 size-4 shrink-0 accent-accent" />
+            <span>
+              An AI agent operates this account
+              <span className="block text-[13px] text-fg-subtle">Adds an AI label next to your name. You can change it in settings.</span>
+            </span>
+          </label>
+        )}
+        <button
+          type="submit"
+          disabled={pending}
+          className={clsx("mt-3 h-[52px] text-[17px]", legacy ? "btn-outline" : "btn-primary shadow-lg shadow-accent/20")}
+        >
+          {pending ? config.pending : config.submit}
+        </button>
+      </form>
+      {mode === "login" && showDemo && (
+        <p className="mt-4 rounded-lg bg-bg-muted px-3 py-2 text-[13px] text-fg-muted">
+          Demo account: <span className="font-mono text-fg">demo</span> /{" "}
+          <span className="font-mono text-fg">password123</span>
+        </p>
+      )}
+    </>
+  );
 
   return (
     <ViewTransition
@@ -133,91 +227,25 @@ export function AuthForm({
             {notice}
           </p>
         )}
-        {showForm && (
+        {legacy ? (
           <>
-            {/* `action` covers submits before hydration. After hydration onSubmit takes over so
-                React keeps the typed values when validation fails. */}
-            <form
-              action={action}
-              onSubmit={(e) => {
-                e.preventDefault();
-                const data = new FormData(e.currentTarget);
-                startTransition(() => action(data));
-              }}
-              className="flex flex-col gap-5"
-              noValidate
-            >
-              {state?.error && (
-                <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
-                  {state.error}
-                </p>
-              )}
-              {config.fields.map((field: Field) => (
-                <label key={field.name} className="block">
-                  <span className="mb-1.5 block text-[13px] font-medium text-fg-muted">{field.label}</span>
-                  <span className="relative block">
-                    {field.name === "username" && (
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[15px] text-fg-subtle">
-                        @
-                      </span>
-                    )}
-                    <input
-                      name={field.name}
-                      defaultValue={defaults[field.name]}
-                      type={field.type ?? "text"}
-                      autoComplete={field.autoComplete}
-                      aria-invalid={!!errors[field.name]}
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      className={clsx(
-                        "input bg-bg/60 aria-invalid:border-danger dark:bg-white/[0.04]",
-                        field.name === "username" && "pl-7",
-                      )}
-                    />
-                  </span>
-                  {errors[field.name] ? (
-                    <span className="mt-1 block text-sm text-danger">{errors[field.name]}</span>
-                  ) : (
-                    field.hint && <span className="mt-1 block text-[13px] text-fg-subtle">{field.hint}</span>
-                  )}
-                </label>
-              ))}
-              {mode === "finish" && picture && (
-                <label className="flex cursor-pointer items-start gap-3 text-[15px]">
-                  <input name="usePicture" type="checkbox" value="1" defaultChecked className="mt-0.5 size-4 shrink-0 accent-accent" />
-                  <span>Use my {oidcName} photo</span>
-                </label>
-              )}
-              {mode !== "login" && (
-                <label className="flex cursor-pointer items-start gap-3 text-[15px]">
-                  <input name="aiOperated" type="checkbox" value="1" className="mt-0.5 size-4 shrink-0 accent-accent" />
-                  <span>
-                    An AI agent operates this account
-                    <span className="block text-[13px] text-fg-subtle">Adds an AI label next to your name. You can change it in settings.</span>
-                  </span>
-                </label>
-              )}
-              <button type="submit" disabled={pending} className="btn-primary mt-3 h-[52px] text-[17px] shadow-lg shadow-accent/20">
-                {pending ? config.pending : config.submit}
-              </button>
-            </form>
-            {mode === "login" && showDemo && (
-              <p className="mt-4 rounded-lg bg-bg-muted px-3 py-2 text-[13px] text-fg-muted">
-                Demo account: <span className="font-mono text-fg">demo</span> /{" "}
-                <span className="font-mono text-fg">password123</span>
+            {issuerButton}
+            {/* Password accounts from before CrystlCloud sign in here once, then connect in Settings. */}
+            <details className="mt-6" open={!!state}>
+              <summary className="mx-auto w-fit cursor-pointer list-none text-[13px] text-fg-subtle hover:text-fg-muted hover:underline">
+                Legacy sign-in
+              </summary>
+              <p className="mt-3 mb-5 text-center text-[13px] text-fg-subtle">
+                For Elytra accounts made before {oidcName}. After you sign in, connect {oidcName} in Settings.
               </p>
-            )}
+              {passwordSection}
+            </details>
           </>
-        )}
-        {/* The issuer button sits below the password form, or stands alone when passwords are off. */}
-        {oidcName && mode !== "finish" && (
+        ) : (
           <>
-            {showForm && <p className="my-5 text-center text-[13px] text-fg-subtle">or</p>}
-            <form action={signInWithOidc}>
-              <button type="submit" className="btn-outline h-[52px] w-full text-[17px]">
-                {mode === "signup" ? "Sign up" : "Sign in"} with {oidcName}
-              </button>
-            </form>
+            {showForm && passwordSection}
+            {issuerButton && showForm && <p className="my-5 text-center text-[13px] text-fg-subtle">or</p>}
+            {issuerButton}
           </>
         )}
         {passwordLogin && <p className="mt-8 text-center text-[15px] text-fg-muted">{config.footer}</p>}
