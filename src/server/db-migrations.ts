@@ -124,7 +124,8 @@ export function migrateBackend(db: DatabaseSync): void {
   // What Elytra last copied from the issuer's profile: its name, its picture URL, and the local
   // avatar file made from that picture. Sign-in copies a value again only after the issuer's changes.
   const linkColumns = db.prepare("PRAGMA table_info(identity_links)").all().map(c => c.name);
-  // refresh_token (sealed with the client secret) lets Elytra push profile edits back to the issuer.
+  // refresh_token (sealed with the client secret) lets page loads pick up profile changes from the
+  // issuer and, when it offers profile:write, lets Elytra send profile edits back.
   for (const column of ["synced_name", "synced_picture", "synced_avatar_url", "refresh_token"]) {
     if (!linkColumns.includes(column)) db.exec(`ALTER TABLE identity_links ADD COLUMN ${column} TEXT`);
   }

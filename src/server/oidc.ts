@@ -190,11 +190,10 @@ async function exchangeCode(config: OidcConfig, code: string, verifier: string, 
   const info = await fetchJson(provider.userinfo_endpoint, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
   if (info.sub !== subject) throw new OidcError("token", "userinfo subject does not match the ID token");
   const picture = typeof info.picture === "string" && /^https?:\/\//.test(info.picture) ? info.picture : null;
-  // Keep the refresh token only when it can write the profile; that's all Elytra uses it for.
-  const granted = typeof tokens.scope === "string" ? tokens.scope.split(" ").includes(WRITE_SCOPE) : provider.profileWrite;
+  // The refresh token lets page loads pick up profile changes, and with profile:write, send Elytra edits back.
   return {
     identity: { issuer: config.issuer, subject, name: typeof info.name === "string" ? info.name.trim().slice(0, 200) : "", picture },
-    refreshToken: granted && typeof tokens.refresh_token === "string" ? tokens.refresh_token : null,
+    refreshToken: typeof tokens.refresh_token === "string" ? tokens.refresh_token : null,
   };
 }
 
@@ -336,7 +335,8 @@ export function pushProfile(config: OidcConfig, userId: string): Promise<void> {
 async function pushProfileNow(config: OidcConfig, userId: string): Promise<void> {
   try {
     const state = profilePushState(userId, config.issuer);
-    if (!state?.refresh_token) return;
+    // Only issuers that offer profile:write (CrystlCloud Accounts with /api/profile) accept edits.
+    if (!state?.refresh_token || !(await metadata(config.issuer)).profileWrite) return;
     const syncedName = state.synced_name === null ? null : [...state.synced_name.trim()].slice(0, 50).join("");
     const body: { name?: string; photo?: string | null } = {};
     if (state.display_name !== syncedName) body.name = state.display_name;
