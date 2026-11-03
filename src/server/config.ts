@@ -46,11 +46,11 @@ function httpUrl(name: string, value: string): URL {
   return url;
 }
 export const CRYSTLCLOUD_ISSUER = "https://accounts.crystlcloud.org/api/auth";
-/** How people sign in. "oidc", the default, signs in through CrystlCloud Accounts or another
- * OpenID Connect issuer, with password sign-in still on unless turned off. "local" is Elytra's own
- * usernames and passwords only. Read on each call, because tests change the environment between cases. */
+/** How people sign in. "local", the default for self-hosted instances, is Elytra's own usernames and
+ * passwords. "oidc" is for official CrystlCloud instances: it signs in through CrystlCloud Accounts
+ * (or another OpenID Connect issuer), with legacy password sign-in still on unless turned off. Read on each call, because tests change the environment between cases. */
 export function accountsConfig() {
-  const mode = choice("ELYTRA_ACCOUNTS", "oidc", ["local", "oidc"]);
+  const mode = choice("ELYTRA_ACCOUNTS", "local", ["local", "oidc"]);
   const passwordLogin = choice("ELYTRA_PASSWORD_LOGIN", "true", ["true", "false"]) === "true";
   if (mode === "local") {
     if (!passwordLogin) throw new Error("ELYTRA_PASSWORD_LOGIN=false needs ELYTRA_ACCOUNTS=oidc, or nobody could sign in");
@@ -62,9 +62,9 @@ export function accountsConfig() {
   const callback = `${publicOrigin ? httpUrl("ELYTRA_PUBLIC_ORIGIN", publicOrigin).origin : "https://<your Elytra domain>"}/api/oidc/callback`;
   const clientId = process.env.ELYTRA_OIDC_CLIENT_ID, clientSecret = process.env.ELYTRA_OIDC_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    throw new Error(`ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required: ELYTRA_ACCOUNTS is oidc (the default), so Elytra signs in through ${issuer}. ` +
+    throw new Error(`ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required when ELYTRA_ACCOUNTS=oidc, because Elytra signs in through ${issuer}. ` +
       `Register Elytra with CrystlCloud Accounts by running \`npm run client -- add Elytra ${callback} --owner <your email>\` in the accounts server, ` +
-      "then set both values from its output. To use only Elytra's own usernames and passwords instead, set ELYTRA_ACCOUNTS=local.");
+      "then set both values from its output. To use Elytra's own usernames and passwords instead, remove ELYTRA_ACCOUNTS or set it to local.");
   }
   // The redirect URI must match the registered one exactly, so it can't fall back to request headers.
   const redirectUri = `${httpUrl("ELYTRA_PUBLIC_ORIGIN", required("ELYTRA_PUBLIC_ORIGIN", "when signing in through an OIDC issuer")).origin}/api/oidc/callback`;

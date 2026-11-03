@@ -17,8 +17,6 @@ import { DatabaseSync } from "node:sqlite";
 
 // Never mutate the running app's database.
 process.env.ELYTRA_DB_PATH = ":memory:";
-// These checks use password accounts, so pick local accounts over the CrystlCloud default.
-process.env.ELYTRA_ACCOUNTS = "local";
 const db = getDb();
 let checks = 0;
 async function check(label: string, fn: () => void | Promise<void>) { await fn(); checks++; console.log(`PASS ${label}`); }

@@ -11,8 +11,6 @@ import { registerMessagingIdentity, messagingBackup } from "../src/server/data/e
 import { createConversation, sendMessage, messagesFor, deleteMessage, unreadMessageCount } from "../src/server/data/messages";
 
 process.env.ELYTRA_DB_PATH = ":memory:";
-// These checks use password accounts, so pick local accounts over the CrystlCloud default.
-process.env.ELYTRA_ACCOUNTS = "local";
 const db = getDb(), directory = await mkdtemp(join(tmpdir(), "elytra-e2ee-"));
 const cache = globalThis as typeof globalThis & { elytraDb?: DatabaseSync };
 let checks = 0;

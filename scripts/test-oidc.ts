@@ -118,22 +118,22 @@ try {
     assert.deepEqual(await signIn("sub-new"), { kind: "session", userId: robin.id });
   });
 
-  await check("config: CrystlCloud by default, local accounts on request, and missing client credentials fail with the fix", () => {
+  await check("config: local accounts by default, CrystlCloud with oidc, and missing client credentials fail with the fix", () => {
     const saved = { ...process.env };
     try {
-      delete process.env.ELYTRA_ACCOUNTS; delete process.env.ELYTRA_OIDC_ISSUER; delete process.env.ELYTRA_OIDC_NAME;
-      assert.deepEqual(accountsConfig().oidc, { issuer: CRYSTLCLOUD_ISSUER, clientId: "elytra-test", clientSecret: "s3cret", redirectUri: "http://localhost:4000/api/oidc/callback", name: "CrystlCloud" });
-      assert.equal(accountsConfig().passwordLogin, true);
-      process.env.ELYTRA_ACCOUNTS = "";
-      assert.equal(accountsConfig().oidc?.issuer, CRYSTLCLOUD_ISSUER, "an empty value from Compose means the default");
-      delete process.env.ELYTRA_OIDC_CLIENT_SECRET;
-      assert.throws(accountsConfig, (error: Error) => /ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required/.test(error.message)
-        && error.message.includes("npm run client -- add Elytra http://localhost:4000/api/oidc/callback") && error.message.includes("ELYTRA_ACCOUNTS=local"));
-      process.env.ELYTRA_ACCOUNTS = "local";
+      delete process.env.ELYTRA_ACCOUNTS;
       assert.deepEqual(accountsConfig(), { passwordLogin: true, oidc: null });
+      process.env.ELYTRA_ACCOUNTS = "";
+      assert.equal(accountsConfig().oidc, null, "an empty value from Compose means the default");
       process.env.ELYTRA_PASSWORD_LOGIN = "false";
       assert.throws(accountsConfig, /needs ELYTRA_ACCOUNTS=oidc/);
-      process.env.ELYTRA_ACCOUNTS = "oidc"; process.env.ELYTRA_OIDC_CLIENT_SECRET = "s3cret";
+      delete process.env.ELYTRA_PASSWORD_LOGIN;
+      process.env.ELYTRA_ACCOUNTS = "oidc"; delete process.env.ELYTRA_OIDC_ISSUER; delete process.env.ELYTRA_OIDC_NAME;
+      assert.deepEqual(accountsConfig(), { passwordLogin: true, oidc: { issuer: CRYSTLCLOUD_ISSUER, clientId: "elytra-test", clientSecret: "s3cret", redirectUri: "http://localhost:4000/api/oidc/callback", name: "CrystlCloud" } });
+      delete process.env.ELYTRA_OIDC_CLIENT_SECRET;
+      assert.throws(accountsConfig, (error: Error) => /ELYTRA_OIDC_CLIENT_ID and ELYTRA_OIDC_CLIENT_SECRET are required/.test(error.message)
+        && error.message.includes("npm run client -- add Elytra http://localhost:4000/api/oidc/callback") && error.message.includes("set it to local"));
+      process.env.ELYTRA_OIDC_CLIENT_SECRET = "s3cret"; process.env.ELYTRA_PASSWORD_LOGIN = "false";
       assert.equal(accountsConfig().passwordLogin, false);
       process.env.ELYTRA_OIDC_ISSUER = "http://accounts.example/api/auth";
       assert.throws(accountsConfig, /must use https/);
