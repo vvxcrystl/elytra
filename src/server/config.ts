@@ -25,3 +25,49 @@ function readConfig() {
   };
 }
 export const backendConfig = () => config ??= readConfig();
+
+function choice<T extends string>(name: string, fallback: T, choices: readonly T[]): T {
+  const value = process.env[name] ?? fallback;
+  if (!choices.includes(value as T)) throw new Error(`${name} must be one of: ${choices.join(", ")}`);
+  return value as T;
+}
+function required(name: string, why: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required ${why}`);
+  return value;
+}
+function httpUrl(name: string, value: string): URL {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error(`${name} must be a URL`); }
+  // Plain http is only for a provider running on this machine during development.
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) throw new Error(`${name} must use https`);
+  return url;
+}
+/** How people sign in. "local" is username and password only. "oidc" adds an OpenID Connect
+ * issuer such as CrystlCloud Accounts, and can turn password sign-in off. Read on each call,
+ * because tests change the environment between cases. */
+export function accountsConfig() {
+  const mode = choice("ELYTRA_ACCOUNTS", "local", ["local", "oidc"]);
+  const passwordLogin = choice("ELYTRA_PASSWORD_LOGIN", "true", ["true", "false"]) === "true";
+  if (mode === "local") {
+    if (!passwordLogin) throw new Error("ELYTRA_PASSWORD_LOGIN=false needs ELYTRA_ACCOUNTS=oidc, or nobody could sign in");
+    return { passwordLogin, oidc: null };
+  }
+  const why = "when ELYTRA_ACCOUNTS=oidc";
+  const issuer = required("ELYTRA_OIDC_ISSUER", why);
+  httpUrl("ELYTRA_OIDC_ISSUER", issuer);
+  const origin = httpUrl("ELYTRA_PUBLIC_ORIGIN", required("ELYTRA_PUBLIC_ORIGIN", why)).origin;
+  return {
+    passwordLogin,
+    oidc: {
+      // Kept exactly as written: it must equal the provider's `iss` claim character for character.
+      issuer,
+      clientId: required("ELYTRA_OIDC_CLIENT_ID", why),
+      clientSecret: required("ELYTRA_OIDC_CLIENT_SECRET", why),
+      name: process.env.ELYTRA_OIDC_NAME || "CrystlCloud",
+      redirectUri: `${origin}/api/oidc/callback`,
+    },
+  };
+}
+export type OidcConfig = NonNullable<ReturnType<typeof accountsConfig>["oidc"]>;

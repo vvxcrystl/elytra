@@ -22,17 +22,32 @@ export function viewerById(id: string): Viewer | null {
 }
 export const userByUsername = (username: string) => one<UserRow>("SELECT * FROM users WHERE username_lower = ?", username.toLowerCase());
 export const RESERVED_USERNAMES = new Set(["home", "explore", "notifications", "bookmarks", "login", "signup", "api", "settings", "search", "compose", "messages", "welcome"]);
-export async function createUser(username: string, displayName: string, password: string, aiOperated = false): Promise<Viewer> {
+/** Why a username can't be registered, or null if it can. Doesn't check whether it's taken. */
+export function usernameProblem(username: string): string | null {
+  if (!/^[A-Za-z0-9_]{3,15}$/.test(username)) return "Use 3–15 letters, numbers, or underscores";
+  if (RESERVED_USERNAMES.has(username.toLowerCase())) return "That username isn't available";
+  return null;
+}
+function checkNames(username: string, displayName: string): void {
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username)) throw new Error("Username must be 3–15 letters, numbers, or underscores");
   if (RESERVED_USERNAMES.has(username.toLowerCase())) throw new Error("That username isn't available");
   if (!displayName.trim() || [...displayName.trim()].length > 50) throw new Error("Display name must be 1–50 characters");
-  if ([...password].length < 8) throw new Error("Password must be at least 8 characters");
-  if ([...password].length > 1024) throw new Error("Password must be at most 1024 characters");
+}
+/** Inserts a user row after the name checks. An empty password hash means the account can't sign in
+ * with a password; `authenticate` treats it like an unknown account. */
+export function insertUser(username: string, displayName: string, passwordHash: string, aiOperated: boolean, avatarUrl: string | null = null): Viewer {
+  checkNames(username, displayName);
   const id = newId();
   assertNameAllowed(username, "username", id);
   assertNameAllowed(displayName.trim(), "display_name", id);
-  run("INSERT INTO users(id,username,username_lower,display_name,password_hash,created_at,ai_operated) VALUES(?,?,?,?,?,?,?)", id, username, username.toLowerCase(), displayName.trim(), await hashPassword(password), Date.now(), aiOperated ? 1 : 0);
+  run("INSERT INTO users(id,username,username_lower,display_name,password_hash,created_at,ai_operated,avatar_url) VALUES(?,?,?,?,?,?,?,?)", id, username, username.toLowerCase(), displayName.trim(), passwordHash, Date.now(), aiOperated ? 1 : 0, avatarUrl);
   return viewerById(id)!;
+}
+export async function createUser(username: string, displayName: string, password: string, aiOperated = false): Promise<Viewer> {
+  checkNames(username, displayName);
+  if ([...password].length < 8) throw new Error("Password must be at least 8 characters");
+  if ([...password].length > 1024) throw new Error("Password must be at most 1024 characters");
+  return insertUser(username, displayName, await hashPassword(password), aiOperated);
 }
 // A valid-format unknown-account hash keeps failed logins on the same KDF path.
 const dummyHash = `${"0".repeat(32)}:${"0".repeat(128)}`;

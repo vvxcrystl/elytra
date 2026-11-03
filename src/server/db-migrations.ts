@@ -38,6 +38,25 @@ export function migrateBackend(db: DatabaseSync): void {
       PRIMARY KEY(post_id,user_id,kind)
     );
     CREATE INDEX IF NOT EXISTS post_visits_user ON post_visits(user_id);
+    -- Sign-in through an OpenID Connect issuer. A link maps the issuer's stable subject to an
+    -- existing user ID, so user IDs and everything keyed by them stay the same.
+    CREATE TABLE IF NOT EXISTS identity_links (
+      issuer TEXT NOT NULL, subject TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at INTEGER NOT NULL,
+      PRIMARY KEY(issuer,subject), UNIQUE(user_id,issuer)
+    );
+    -- One row per sign-in started. The browser keeps the state in a cookie; the verifier and nonce stay here.
+    CREATE TABLE IF NOT EXISTS oidc_requests (
+      state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL, nonce TEXT NOT NULL,
+      link_user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL
+    );
+    -- A verified identity with no account yet, waiting for its owner to pick a username.
+    CREATE TABLE IF NOT EXISTS oidc_signups (
+      token_hash TEXT PRIMARY KEY, issuer TEXT NOT NULL, subject TEXT NOT NULL,
+      name TEXT NOT NULL, picture TEXT, expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS oidc_requests_expiry ON oidc_requests(expires_at);
+    CREATE INDEX IF NOT EXISTS oidc_signups_expiry ON oidc_signups(expires_at);
     CREATE INDEX IF NOT EXISTS moderation_item ON moderation_results(item_id,item_type,created_at DESC);
     CREATE TABLE IF NOT EXISTS moderation_jobs (
       id INTEGER PRIMARY KEY, revision TEXT NOT NULL UNIQUE, item_id TEXT NOT NULL, item_type TEXT NOT NULL,
