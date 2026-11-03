@@ -32,6 +32,7 @@ export function proxy(request: NextRequest) {
   // scripts; the app reads x-nonce for the theme bootstrap script. No upgrade-insecure-requests:
   // self-hosted plain-http installs must keep loading same-origin media.
   for (const [key, value] of Object.entries(securityHeaders(nonce))) requestHeaders.set(key, value);
+  requestHeaders.set("x-nonce", nonce);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   for (const [key, value] of Object.entries(securityHeaders(nonce))) response.headers.set(key, value);
   return response;
