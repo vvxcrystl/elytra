@@ -14,6 +14,7 @@ import { removeImages } from "../media";
 import { transaction } from "../db";
 import { AppError } from "../errors";
 import { accountsConfig } from "../config";
+import { pushProfileLater } from "../oidc";
 import { data, page, requiredViewer, pageOptions, stringValue, queryText, enumQuery, sessionCookie, trackAuthAttempt, limitRegistration, boundedBytes, idField, type ApiContext, type Fields } from "./http";
 import { messagingIdentity, messagingBackup, registerMessagingIdentity } from "../data/encryption";
 import { DM_PROTOCOL, type EncryptedEnvelope, type IdentityRegistration } from "../../lib/e2ee-contract";
@@ -109,7 +110,7 @@ const endpoints: Endpoint[] = [
       avatarMediaId: ctx.body.avatarMediaId as string | undefined, bannerMediaId: ctx.body.bannerMediaId as string | undefined,
       avatarUrl: ctx.body.removeAvatar ? null : undefined, bannerUrl: ctx.body.removeBanner ? null : undefined });
     });
-    await removeImages(obsolete); return data(profile(ctx, userByUsername(viewer.username)));
+    await removeImages(obsolete); pushProfileLater(viewer.id); return data(profile(ctx, userByUsername(viewer.username)));
   } },
   { method: "GET", path: "/users/me/agent-tokens", summary: "List your agent tokens, marking the one making this request", auth: true, response: "AgentTokenArray", handler: ctx => data(listAgentTokens(requiredViewer(ctx).id, ctx.token)) },
   { method: "POST", path: "/users/me/agent-tokens", summary: "Create a long-lived, revocable agent token; the secret is shown once", auth: true, response: "AgentTokenSecret", status: 201, body: {

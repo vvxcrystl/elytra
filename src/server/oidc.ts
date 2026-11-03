@@ -1,8 +1,10 @@
 import "server-only";
-import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify, type JsonWebKey } from "node:crypto";
-import type { OidcConfig } from "./config";
-import { saveOidcRequest, takeOidcRequest, userIdForIdentity, linkIdentity, savePendingSignup, syncedProfile, applyProfileSync, type Identity } from "./data/identities";
-import { removeImages, saveImage, validateImage } from "./media";
+import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, timingSafeEqual, verify, type JsonWebKey } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { accountsConfig, type OidcConfig } from "./config";
+import { saveOidcRequest, takeOidcRequest, userIdForIdentity, linkIdentity, savePendingSignup, syncedProfile, applyProfileSync, saveRefreshToken, profilePushState, recordPushedProfile, type Identity } from "./data/identities";
+import { removeImages, saveImage, uploadDirectory, validateImage, validMediaName } from "./media";
 import { AppError } from "./errors";
 
 // OpenID Connect sign-in: authorization code flow with PKCE (S256), a client secret sent with
@@ -14,7 +16,12 @@ export const SIGNUP_COOKIE = "elytra_oidc_signup";
 const TIMEOUT_MS = 10000;
 const CLOCK_SKEW_S = 60;
 
-type Metadata = { issuer: string; authorization_endpoint: string; token_endpoint: string; userinfo_endpoint: string; jwks_uri: string };
+type Metadata = {
+  issuer: string; authorization_endpoint: string; token_endpoint: string; userinfo_endpoint: string; jwks_uri: string;
+  /** The issuer offers profile:write (CrystlCloud Accounts does), so Elytra can push profile edits back. */
+  profileWrite: boolean;
+};
+const WRITE_SCOPE = "profile:write";
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
 const random = () => base64url(randomBytes(32));
 
@@ -34,7 +41,7 @@ async function metadata(issuer: string): Promise<Metadata> {
   const fields = ["issuer", "authorization_endpoint", "token_endpoint", "userinfo_endpoint", "jwks_uri"] as const;
   if (fields.some(f => typeof body[f] !== "string")) throw new OidcError("provider", "discovery document is missing endpoints");
   if (body.issuer !== issuer) throw new OidcError("provider", `discovery issuer ${String(body.issuer)} does not match ELYTRA_OIDC_ISSUER`);
-  const value = Object.fromEntries(fields.map(f => [f, body[f] as string])) as Metadata;
+  const value = { ...Object.fromEntries(fields.map(f => [f, body[f] as string])), profileWrite: Array.isArray(body.scopes_supported) && body.scopes_supported.includes(WRITE_SCOPE) } as Metadata;
   metadataCache = { issuer, at: Date.now(), value };
   return value;
 }
@@ -75,7 +82,7 @@ export async function beginOidc(config: OidcConfig, linkUserId: string | null): 
   const url = new URL(provider.authorization_endpoint);
   url.search = new URLSearchParams({
     response_type: "code", client_id: config.clientId, redirect_uri: config.redirectUri,
-    scope: "openid profile email offline_access", state, nonce,
+    scope: `openid profile email offline_access${provider.profileWrite ? ` ${WRITE_SCOPE}` : ""}`, state, nonce,
     code_challenge: base64url(createHash("sha256").update(verifier).digest()), code_challenge_method: "S256",
   }).toString();
   return { url: url.href, state };
@@ -143,14 +150,17 @@ export async function completeOidc(config: OidcConfig, params: URLSearchParams, 
     if (linking && viewerId !== request.linkUserId) throw new OidcError("session", "the Elytra user who started linking is not signed in");
     const code = params.get("code");
     if (!code) throw new OidcError("token", "callback has no code");
-    const identity = await exchangeCode(config, code, request.verifier, request.nonce);
+    const { identity, refreshToken } = await exchangeCode(config, code, request.verifier, request.nonce);
+    const sealed = refreshToken && seal(config, refreshToken);
     if (viewerId && linking) {
       linkIdentity(viewerId, identity.issuer, identity.subject);
+      saveRefreshToken(identity.issuer, identity.subject, sealed);
       await syncProfile(config, identity);
       return { kind: "linked" };
     }
     const userId = userIdForIdentity(identity.issuer, identity.subject);
-    if (!userId) return { kind: "signup", token: savePendingSignup(identity) };
+    if (!userId) return { kind: "signup", token: savePendingSignup(identity, sealed) };
+    saveRefreshToken(identity.issuer, identity.subject, sealed);
     await syncProfile(config, identity);
     return { kind: "session", userId };
   } catch (error) {
@@ -161,7 +171,7 @@ export async function completeOidc(config: OidcConfig, params: URLSearchParams, 
   }
 }
 
-async function exchangeCode(config: OidcConfig, code: string, verifier: string, nonce: string): Promise<Identity> {
+async function exchangeCode(config: OidcConfig, code: string, verifier: string, nonce: string): Promise<{ identity: Identity; refreshToken: string | null }> {
   const provider = await metadata(config.issuer);
   // client_secret_basic form-encodes the ID and secret before joining them (RFC 6749 section 2.3.1).
   const basic = Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(config.clientSecret)}`).toString("base64");
@@ -178,7 +188,12 @@ async function exchangeCode(config: OidcConfig, code: string, verifier: string, 
   const info = await fetchJson(provider.userinfo_endpoint, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
   if (info.sub !== subject) throw new OidcError("token", "userinfo subject does not match the ID token");
   const picture = typeof info.picture === "string" && /^https?:\/\//.test(info.picture) ? info.picture : null;
-  return { issuer: config.issuer, subject, name: typeof info.name === "string" ? info.name.trim().slice(0, 200) : "", picture };
+  // Keep the refresh token only when it can write the profile; that's all Elytra uses it for.
+  const granted = typeof tokens.scope === "string" ? tokens.scope.split(" ").includes(WRITE_SCOPE) : provider.profileWrite;
+  return {
+    identity: { issuer: config.issuer, subject, name: typeof info.name === "string" ? info.name.trim().slice(0, 200) : "", picture },
+    refreshToken: granted && typeof tokens.refresh_token === "string" ? tokens.refresh_token : null,
+  };
 }
 
 /** Downloads the issuer's profile photo for a new account. Only fetches from the issuer's own
@@ -217,4 +232,96 @@ async function syncProfile(config: OidcConfig, identity: Identity): Promise<void
     if (saved) await removeImages([saved]);
     console.error("Unable to sync the profile from the account service", error);
   }
+}
+
+// Refresh tokens are sealed with a key derived from the client secret, which lives in the
+// environment, so a copy of the database alone can't write anyone's profile.
+const sealKey = (config: OidcConfig) => createHash("sha256").update(`elytra profile sync\0${config.clientSecret}`).digest();
+function seal(config: OidcConfig, value: string): string {
+  const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", sealKey(config), iv);
+  const data = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return base64url(Buffer.concat([iv, cipher.getAuthTag(), data]));
+}
+function unseal(config: OidcConfig, sealed: string): string | null {
+  try {
+    const bytes = Buffer.from(sealed, "base64url");
+    const decipher = createDecipheriv("aes-256-gcm", sealKey(config), bytes.subarray(0, 12));
+    decipher.setAuthTag(bytes.subarray(12, 28));
+    return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString("utf8");
+  } catch { return null; }
+}
+
+// The issuer's profile endpoint accepts JPEG, PNG and WebP up to 1 MB.
+const PUSH_TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" };
+const PUSH_MAX_BYTES = 1024 * 1024;
+const pushes = new Map<string, Promise<void>>();
+
+/** Sends Elytra-side changes to the linked user's name or avatar back to the issuer, so the profile
+ * stays the same in both places. Compares the current values with the last synced ones, so it's safe
+ * to call after any profile edit. One push runs per user at a time, because each refresh rotates the
+ * refresh token. Never throws. */
+/** Call after a profile edit. Pushes in the background when an issuer is configured, so the edit
+ * doesn't wait on the issuer. Elytra runs as one long-lived Node process, so the push finishes. */
+export function pushProfileLater(userId: string): void {
+  const config = accountsConfig().oidc;
+  if (config) void pushProfile(config, userId);
+}
+export function pushProfile(config: OidcConfig, userId: string): Promise<void> {
+  const next = (pushes.get(userId) ?? Promise.resolve()).then(() => pushProfileNow(config, userId));
+  pushes.set(userId, next);
+  return next.finally(() => { if (pushes.get(userId) === next) pushes.delete(userId); });
+}
+async function pushProfileNow(config: OidcConfig, userId: string): Promise<void> {
+  try {
+    const state = profilePushState(userId, config.issuer);
+    const refreshToken = state?.refresh_token && unseal(config, state.refresh_token);
+    if (!state || !refreshToken) return;
+    const syncedName = state.synced_name === null ? null : [...state.synced_name.trim()].slice(0, 50).join("");
+    const body: { name?: string; photo?: string | null } = {};
+    if (state.display_name !== syncedName) body.name = state.display_name;
+    if (state.avatar_url !== state.synced_avatar_url) {
+      const photo = state.avatar_url && await photoDataUrl(state.avatar_url);
+      // GIFs and very large avatars stay in Elytra only; the name still syncs.
+      if (photo !== undefined) body.photo = photo;
+    }
+    if (body.name === undefined && body.photo === undefined) return;
+
+    const provider = await metadata(config.issuer);
+    const basic = Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(config.clientSecret)}`).toString("base64");
+    const refreshed = await fetch(provider.token_endpoint, {
+      method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    });
+    const tokens = await refreshed.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown };
+    if (!refreshed.ok || typeof tokens.access_token !== "string") {
+      // A revoked or expired grant can't recover; the next sign-in stores a new one.
+      if (refreshed.status === 400 || refreshed.status === 401) saveRefreshToken(config.issuer, state.subject, null);
+      throw new Error(`refresh returned ${refreshed.status}`);
+    }
+    if (typeof tokens.refresh_token === "string") saveRefreshToken(config.issuer, state.subject, seal(config, tokens.refresh_token));
+
+    const res = await fetch(`${new URL(config.issuer).origin}/api/profile`, {
+      method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ access_token: tokens.access_token, ...body }),
+    });
+    const saved = await res.json().catch(() => ({})) as { name?: unknown; picture?: unknown };
+    if (!res.ok) throw new Error(`profile update returned ${res.status}`);
+    recordPushedProfile(config.issuer, state.subject, {
+      name: body.name !== undefined && typeof saved.name === "string" ? saved.name : undefined,
+      picture: body.photo !== undefined ? { url: typeof saved.picture === "string" ? saved.picture : null, avatarUrl: state.avatar_url } : undefined,
+    });
+  } catch (error) {
+    console.error("Unable to send the profile change to the account service", error);
+  }
+}
+/** The stored avatar as a data URL, or undefined when the issuer wouldn't accept it. */
+async function photoDataUrl(avatarUrl: string): Promise<string | undefined> {
+  const name = avatarUrl.replace(/^\/api\/media\//, "");
+  const type = PUSH_TYPES[name.split(".").pop() ?? ""];
+  if (!avatarUrl.startsWith("/api/media/") || !validMediaName(name) || !type) return undefined;
+  const bytes = await readFile(join(/*turbopackIgnore: true*/ uploadDirectory(), name)).catch(() => null);
+  if (!bytes || bytes.length > PUSH_MAX_BYTES) return undefined;
+  return `data:${type};base64,${bytes.toString("base64")}`;
 }

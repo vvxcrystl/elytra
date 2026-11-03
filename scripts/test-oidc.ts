@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDb } from "../src/server/db";
 import { authenticate, createUser, one, run } from "../src/server/data/core";
 import { createUserFromSignup, linkIdentity, pendingSignup, userIdForIdentity } from "../src/server/data/identities";
 import { accountsConfig, CRYSTLCLOUD_ISSUER } from "../src/server/config";
-import { beginOidc, completeOidc } from "../src/server/oidc";
+import { beginOidc, completeOidc, pushProfile } from "../src/server/oidc";
 
 // A fake issuer on a random local port stands in for CrystlCloud Accounts: discovery, JWKS,
 // a token endpoint that checks the client secret and PKCE verifier, and userinfo.
@@ -22,24 +22,44 @@ type Grant = { challenge: string; nonce: string; sub: string; claims?: Record<st
 const grants = new Map<string, Grant>();
 // Userinfo answers per subject, so a test can change someone's name or photo "on the issuer".
 const profiles = new Map<string, { name: string; picture: string | null }>();
+// Live refresh tokens (rotated on each use) and the profile writes the fake issuer received.
+const refreshTokens = new Map<string, string>(), pushed: { sub: string; name?: string; photo?: string | null }[] = [];
+const BASIC = `Basic ${Buffer.from("elytra-test:s3cret").toString("base64")}`;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url!, issuerOrigin), json = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
-  if (url.pathname === "/api/auth/.well-known/openid-configuration") return json(200, { issuer, authorization_endpoint: `${issuer}/oauth2/authorize`, token_endpoint: `${issuer}/oauth2/token`, userinfo_endpoint: `${issuer}/oauth2/userinfo`, jwks_uri: `${issuer}/jwks` });
+  if (url.pathname === "/api/auth/.well-known/openid-configuration") return json(200, { issuer, authorization_endpoint: `${issuer}/oauth2/authorize`, token_endpoint: `${issuer}/oauth2/token`, userinfo_endpoint: `${issuer}/oauth2/userinfo`, jwks_uri: `${issuer}/jwks`, scopes_supported: ["openid", "profile", "email", "offline_access", "profile:write"] });
   if (url.pathname === "/api/auth/jwks") return json(200, { keys: [{ ...signer.publicKey.export({ format: "jwk" }), kid: "k1", alg: "EdDSA" }] });
   if (url.pathname === "/api/auth/oauth2/token") {
     let body = ""; for await (const chunk of req) body += chunk;
     const form = new URLSearchParams(body), grant = grants.get(form.get("code") ?? "");
+    const newRefresh = (sub: string) => { const token = `rt-${Math.random()}`; refreshTokens.set(token, sub); return token; };
+    if (form.get("grant_type") === "refresh_token") {
+      const sub = refreshTokens.get(form.get("refresh_token") ?? "");
+      if (req.headers.authorization !== BASIC || !sub) return json(400, { error: "invalid_grant" });
+      refreshTokens.delete(form.get("refresh_token")!);
+      return json(200, { access_token: `at-${sub}`, token_type: "Bearer", refresh_token: newRefresh(sub), scope: "openid profile email offline_access profile:write" });
+    }
     const verifier = createHash("sha256").update(form.get("code_verifier") ?? "").digest("base64url");
     if (req.headers.authorization !== `Basic ${Buffer.from("elytra-test:s3cret").toString("base64")}` || !grant || verifier !== grant.challenge || form.get("redirect_uri") !== "http://localhost:4000/api/oidc/callback") return json(400, { error: "invalid_grant" });
     grants.delete(form.get("code")!);
     const claims = { iss: issuer, aud: "elytra-test", sub: grant.sub, nonce: grant.nonce, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300, ...grant.claims };
     const signed = `${Buffer.from(JSON.stringify({ alg: "EdDSA", kid: "k1" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
-    return json(200, { access_token: `at-${grant.sub}`, token_type: "Bearer", id_token: `${signed}.${sign(null, Buffer.from(signed), grant.key ?? signer.privateKey).toString("base64url")}` });
+    return json(200, { access_token: `at-${grant.sub}`, token_type: "Bearer", refresh_token: newRefresh(grant.sub), scope: "openid profile email offline_access profile:write", id_token: `${signed}.${sign(null, Buffer.from(signed), grant.key ?? signer.privateKey).toString("base64url")}` });
   }
   if (url.pathname === "/api/auth/oauth2/userinfo") {
     const sub = req.headers.authorization?.replace(/^Bearer at-/, "");
     const profile = profiles.get(sub ?? "") ?? { name: "Robin Example", picture: `${issuerOrigin}/photos/${sub}` };
     return json(200, { sub, email: "robin@private.example", email_verified: true, ...profile });
+  }
+  if (url.pathname === "/api/profile") {
+    let raw = ""; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw), sub = String(body.access_token).replace(/^at-/, "");
+    if (req.headers.authorization !== BASIC || !String(body.access_token).startsWith("at-")) return json(401, { error: "invalid_client" });
+    pushed.push({ sub, name: body.name, photo: body.photo === undefined ? undefined : body.photo && body.photo.slice(0, 22) });
+    const current = profiles.get(sub) ?? { name: "Robin Example", picture: null };
+    const next = { name: body.name ?? current.name, picture: body.photo === undefined ? current.picture : body.photo && `${issuerOrigin}/photos/pushed-${pushed.length}` };
+    profiles.set(sub, next);
+    return json(200, { name: next.name, picture: next.picture });
   }
   if (url.pathname.startsWith("/photos/")) { res.writeHead(200, { "content-type": "image/jpeg" }); return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])); }
   json(404, {});
@@ -151,6 +171,30 @@ try {
     profiles.set("sub-sam", { name: "Sam Two", picture: null });
     await signIn("sub-sam");
     assert.equal(user().avatar_url, "/api/media/mine.jpg", "but not an avatar chosen in Elytra");
+  });
+
+  await check("profile push: Elytra name and photo edits go to the issuer and don't bounce back at the next sign-in", async () => {
+    const sam = userIdForIdentity(issuer, "sub-sam")!;
+    const user = () => ({ ...one<{ display_name: string; avatar_url: string | null }>("SELECT display_name,avatar_url FROM users WHERE id=?", sam)! });
+    const png = `${"ab".repeat(24)}.png`;
+    await writeFile(join(process.env.ELYTRA_UPLOAD_DIR!, png), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]));
+    run("UPDATE users SET display_name='Sam Elytra',avatar_url=? WHERE id=?", `/api/media/${png}`, sam);
+    await pushProfile(config, sam);
+    assert.deepEqual(pushed.at(-1), { sub: "sub-sam", name: "Sam Elytra", photo: "data:image/png;base64," });
+    const before = user();
+    await signIn("sub-sam");
+    assert.deepEqual(user(), before, "the pushed values count as synced");
+    const count = pushed.length;
+    await pushProfile(config, sam);
+    assert.equal(pushed.length, count, "nothing changed, so nothing is sent");
+    run("UPDATE users SET display_name='Sam Gif',avatar_url='/api/media/cafe.gif' WHERE id=?", sam);
+    await pushProfile(config, sam);
+    assert.deepEqual(pushed.at(-1), { sub: "sub-sam", name: "Sam Gif", photo: undefined }, "GIFs stay in Elytra, the name still goes");
+    refreshTokens.clear();
+    run("UPDATE users SET display_name='Sam Revoked' WHERE id=?", sam);
+    await pushProfile(config, sam);
+    assert.equal(pushed.at(-1)?.name, "Sam Gif", "a revoked grant sends nothing");
+    assert.equal(one<{ t: string | null }>("SELECT refresh_token t FROM identity_links WHERE user_id=?", sam)!.t, null, "and is forgotten until the next sign-in");
   });
 
   await check("config: local accounts by default, CrystlCloud with oidc, and missing client credentials fail with the fix", () => {

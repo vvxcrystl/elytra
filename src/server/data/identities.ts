@@ -44,10 +44,10 @@ export function takeOidcRequest(state: string): { verifier: string; nonce: strin
 }
 
 /** Holds a verified identity that has no account yet. The returned token goes in a cookie. */
-export function savePendingSignup(identity: Identity): string {
+export function savePendingSignup(identity: Identity, sealedRefreshToken: string | null = null): string {
   const token = randomBytes(32).toString("hex");
-  run("INSERT INTO oidc_signups(token_hash,issuer,subject,name,picture,expires_at) VALUES(?,?,?,?,?,?)",
-    tokenHash(token), identity.issuer, identity.subject, identity.name, identity.picture, Date.now() + SIGNUP_AGE);
+  run("INSERT INTO oidc_signups(token_hash,issuer,subject,name,picture,expires_at,refresh_token) VALUES(?,?,?,?,?,?,?)",
+    tokenHash(token), identity.issuer, identity.subject, identity.name, identity.picture, Date.now() + SIGNUP_AGE, sealedRefreshToken);
   return token;
 }
 export function pendingSignup(token: string): Identity | null {
@@ -65,8 +65,9 @@ export function createUserFromSignup(token: string, input: { username: string; d
     const viewer = insertUser(input.username, input.displayName, "", input.aiOperated, input.avatarUrl);
     // Record the issuer's name and picture as already synced, so the choices made here stay until
     // they change on the issuer's side.
-    run("INSERT INTO identity_links(issuer,subject,user_id,created_at,synced_name,synced_picture,synced_avatar_url) VALUES(?,?,?,?,?,?,?)",
-      identity.issuer, identity.subject, viewer.id, Date.now(), identity.name, identity.picture, input.avatarUrl);
+    run(`INSERT INTO identity_links(issuer,subject,user_id,created_at,synced_name,synced_picture,synced_avatar_url,refresh_token)
+      SELECT ?,?,?,?,?,?,?,refresh_token FROM oidc_signups WHERE token_hash=?`,
+      identity.issuer, identity.subject, viewer.id, Date.now(), identity.name, identity.picture, input.avatarUrl, tokenHash(token));
     run("DELETE FROM oidc_signups WHERE token_hash=?", tokenHash(token));
     return viewer;
   });
@@ -104,4 +105,20 @@ export function applyProfileSync(issuer: string, subject: string, update: { name
     }
     return obsolete;
   });
+}
+
+/** Stores the sealed refresh token for pushing profile edits, or clears it with null. */
+export function saveRefreshToken(issuer: string, subject: string, sealed: string | null): void {
+  run("UPDATE identity_links SET refresh_token=? WHERE issuer=? AND subject=?", sealed, issuer, subject);
+}
+/** The linked user's current name and avatar next to what was last synced with the issuer. */
+export function profilePushState(userId: string, issuer: string) {
+  return one<{ subject: string; refresh_token: string | null; synced_name: string | null; synced_avatar_url: string | null; display_name: string; avatar_url: string | null }>(
+    `SELECT l.subject,l.refresh_token,l.synced_name,l.synced_avatar_url,u.display_name,u.avatar_url
+      FROM identity_links l JOIN users u ON u.id=l.user_id WHERE l.user_id=? AND l.issuer=?`, userId, issuer) ?? null;
+}
+/** Records what the issuer now has after a push, so the next sign-in doesn't copy it back. */
+export function recordPushedProfile(issuer: string, subject: string, pushed: { name?: string; picture?: { url: string | null; avatarUrl: string | null } }): void {
+  if (pushed.name !== undefined) run("UPDATE identity_links SET synced_name=? WHERE issuer=? AND subject=?", pushed.name, issuer, subject);
+  if (pushed.picture) run("UPDATE identity_links SET synced_picture=?,synced_avatar_url=? WHERE issuer=? AND subject=?", pushed.picture.url, pushed.picture.avatarUrl, issuer, subject);
 }

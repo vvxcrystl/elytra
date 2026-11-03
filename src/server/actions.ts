@@ -18,7 +18,7 @@ import { validateImage, saveImage, removeImages } from "./media";
 import { sharedCapacity } from "./concurrency";
 import { accountsConfig, backendConfig } from "./config";
 import { trackAuthAttempt, limitRegistration, limitOidcStart } from "./rate-limit";
-import { beginOidc, fetchPicture, SIGNUP_COOKIE, STATE_COOKIE } from "./oidc";
+import { beginOidc, fetchPicture, pushProfileLater, SIGNUP_COOKIE, STATE_COOKIE } from "./oidc";
 import { createUserFromSignup, pendingSignup } from "./data/identities";
 import { AppError } from "./errors";
 
@@ -254,6 +254,7 @@ export async function updateProfile(_prev: FormState, formData: FormData): Promi
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
   finally { release?.(); }
   await removeImages(obsolete);
+  pushProfileLater(viewer.id);
   refresh();
   return { success: true };
 }
@@ -310,6 +311,7 @@ export async function saveOnboardingProfile(_prev: FormState, formData: FormData
   } catch (error) { await removeImages(saved); return { error: errorMessage(error) }; }
   finally { release?.(); }
   await removeImages(obsolete);
+  pushProfileLater(viewer.id);
   refresh();
   return { success: true };
 }
