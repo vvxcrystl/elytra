@@ -121,6 +121,12 @@ export function migrateBackend(db: DatabaseSync): void {
       DELETE FROM moderation_jobs WHERE item_id=OLD.id AND item_type IN ('username','display_name','bio');
       DELETE FROM moderation_results WHERE item_id=OLD.id AND item_type IN ('username','display_name','bio');
     END;`);
+  // What Elytra last copied from the issuer's profile: its name, its picture URL, and the local
+  // avatar file made from that picture. Sign-in copies a value again only after the issuer's changes.
+  const linkColumns = db.prepare("PRAGMA table_info(identity_links)").all().map(c => c.name);
+  for (const column of ["synced_name", "synced_picture", "synced_avatar_url"]) {
+    if (!linkColumns.includes(column)) db.exec(`ALTER TABLE identity_links ADD COLUMN ${column} TEXT`);
+  }
   const overrideColumns = db.prepare("PRAGMA table_info(moderation_slur_overrides)").all().map(c => c.name);
   if (!overrideColumns.includes("reject_publish")) db.exec("ALTER TABLE moderation_slur_overrides ADD COLUMN reject_publish INTEGER NOT NULL DEFAULT 0 CHECK(reject_publish IN (0,1))");
   // Databases created before post analytics lack the view counters.

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getDb } from "../src/server/db";
 import { authenticate, createUser, one, run } from "../src/server/data/core";
 import { createUserFromSignup, linkIdentity, pendingSignup, userIdForIdentity } from "../src/server/data/identities";
@@ -13,9 +16,12 @@ import { beginOidc, completeOidc } from "../src/server/oidc";
 // a token endpoint that checks the client secret and PKCE verifier, and userinfo.
 process.env.ELYTRA_DB_PATH = ":memory:";
 process.env.ELYTRA_SEED_DEMO = "false";
+process.env.ELYTRA_UPLOAD_DIR = await mkdtemp(join(tmpdir(), "elytra-oidc-"));
 const signer = generateKeyPairSync("ed25519"), stranger = generateKeyPairSync("ed25519");
 type Grant = { challenge: string; nonce: string; sub: string; claims?: Record<string, unknown>; key?: KeyObject };
 const grants = new Map<string, Grant>();
+// Userinfo answers per subject, so a test can change someone's name or photo "on the issuer".
+const profiles = new Map<string, { name: string; picture: string | null }>();
 const server = createServer(async (req, res) => {
   const url = new URL(req.url!, issuerOrigin), json = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
   if (url.pathname === "/api/auth/.well-known/openid-configuration") return json(200, { issuer, authorization_endpoint: `${issuer}/oauth2/authorize`, token_endpoint: `${issuer}/oauth2/token`, userinfo_endpoint: `${issuer}/oauth2/userinfo`, jwks_uri: `${issuer}/jwks` });
@@ -32,8 +38,10 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === "/api/auth/oauth2/userinfo") {
     const sub = req.headers.authorization?.replace(/^Bearer at-/, "");
-    return json(200, { sub, name: "Robin Example", email: "robin@private.example", email_verified: true, picture: `${issuerOrigin}/photos/${sub}` });
+    const profile = profiles.get(sub ?? "") ?? { name: "Robin Example", picture: `${issuerOrigin}/photos/${sub}` };
+    return json(200, { sub, email: "robin@private.example", email_verified: true, ...profile });
   }
+  if (url.pathname.startsWith("/photos/")) { res.writeHead(200, { "content-type": "image/jpeg" }); return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])); }
   json(404, {});
 });
 await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -118,6 +126,33 @@ try {
     assert.deepEqual(await signIn("sub-new"), { kind: "session", userId: robin.id });
   });
 
+  await check("profile sync: issuer name and photo changes reach Elytra, while Elytra edits stay until the issuer changes", async () => {
+    const sam = await createUser("oidc_sam", "Sam Local", "securepass123");
+    const user = () => ({ ...one<{ display_name: string; avatar_url: string | null }>("SELECT display_name,avatar_url FROM users WHERE id=?", sam.id)! });
+    profiles.set("sub-sam", { name: "Sam One", picture: `${issuerOrigin}/photos/p1` });
+    assert.deepEqual(await signIn("sub-sam", { linkUserId: sam.id, viewerId: sam.id }), { kind: "linked" });
+    const first = user().avatar_url;
+    assert.equal(user().display_name, "Sam One", "connecting copies the name");
+    assert.match(first ?? "", /^\/api\/media\/[a-f0-9]+\.jpg$/, "connecting copies the photo");
+    run("UPDATE users SET display_name='Sam Custom',avatar_url='/api/media/custom.jpg' WHERE id=?", sam.id);
+    await signIn("sub-sam");
+    assert.deepEqual(user(), { display_name: "Sam Custom", avatar_url: "/api/media/custom.jpg" }, "unchanged issuer values don't overwrite Elytra edits");
+    profiles.set("sub-sam", { name: "Sam Two", picture: `${issuerOrigin}/photos/p2` });
+    await signIn("sub-sam");
+    const second = user().avatar_url;
+    assert.equal(user().display_name, "Sam Two");
+    assert(second && second !== first && second !== "/api/media/custom.jpg", "a new issuer photo replaces the avatar");
+    profiles.set("sub-sam", { name: "Sam Two", picture: null });
+    await signIn("sub-sam");
+    assert.equal(user().avatar_url, null, "removing the issuer photo clears the avatar copied from it");
+    profiles.set("sub-sam", { name: "Sam Two", picture: `${issuerOrigin}/photos/p3` });
+    await signIn("sub-sam");
+    run("UPDATE users SET avatar_url='/api/media/mine.jpg' WHERE id=?", sam.id);
+    profiles.set("sub-sam", { name: "Sam Two", picture: null });
+    await signIn("sub-sam");
+    assert.equal(user().avatar_url, "/api/media/mine.jpg", "but not an avatar chosen in Elytra");
+  });
+
   await check("config: local accounts by default, CrystlCloud with oidc, and missing client credentials fail with the fix", () => {
     const saved = { ...process.env };
     try {
@@ -140,4 +175,4 @@ try {
     } finally { process.env = saved; }
   });
   console.log(`OIDC checks passed: ${checks} groups against a local fake issuer.`);
-} finally { server.close(); }
+} finally { server.close(); await rm(process.env.ELYTRA_UPLOAD_DIR!, { recursive: true, force: true }); }

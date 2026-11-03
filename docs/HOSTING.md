@@ -78,6 +78,7 @@ To use a different OpenID Connect provider, also set `ELYTRA_OIDC_ISSUER` to its
 - Someone who signs in through CrystlCloud for the first time picks an Elytra username. Elytra never takes it from their email. The display name starts as their CrystlCloud name, and they can use their CrystlCloud photo as the avatar.
 - Someone with an existing Elytra account signs in with their password, opens Settings, and selects Connect next to "CrystlCloud account".
 - Elytra never connects two accounts because their email addresses match.
+- The Elytra display name and profile photo follow the CrystlCloud account. Each CrystlCloud sign-in, and connecting an account, copies any name or photo that changed in CrystlCloud since the last copy. Changes made in Elytra stay until the CrystlCloud value changes again.
 - User IDs don't change, so posts, follows and encrypted messages stay with the account. A new device still needs the messaging recovery code.
 - Signing out of Elytra doesn't sign you out of CrystlCloud. If CrystlCloud is unreachable, the sign-in page shows an error and password sign-in keeps working.
 

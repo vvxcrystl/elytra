@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify, type JsonWebKey } from "node:crypto";
 import type { OidcConfig } from "./config";
-import { saveOidcRequest, takeOidcRequest, userIdForIdentity, linkIdentity, savePendingSignup, type Identity } from "./data/identities";
+import { saveOidcRequest, takeOidcRequest, userIdForIdentity, linkIdentity, savePendingSignup, syncedProfile, applyProfileSync, type Identity } from "./data/identities";
+import { removeImages, saveImage, validateImage } from "./media";
 import { AppError } from "./errors";
 
 // OpenID Connect sign-in: authorization code flow with PKCE (S256), a client secret sent with
@@ -145,10 +146,13 @@ export async function completeOidc(config: OidcConfig, params: URLSearchParams, 
     const identity = await exchangeCode(config, code, request.verifier, request.nonce);
     if (viewerId && linking) {
       linkIdentity(viewerId, identity.issuer, identity.subject);
+      await syncProfile(config, identity);
       return { kind: "linked" };
     }
     const userId = userIdForIdentity(identity.issuer, identity.subject);
-    return userId ? { kind: "session", userId } : { kind: "signup", token: savePendingSignup(identity) };
+    if (!userId) return { kind: "signup", token: savePendingSignup(identity) };
+    await syncProfile(config, identity);
+    return { kind: "session", userId };
   } catch (error) {
     if (error instanceof AppError && (error.code === "identity_taken" || error.code === "already_linked")) return { kind: "error", code: error.code, linking };
     if (!(error instanceof OidcError)) throw error;
@@ -187,4 +191,30 @@ export async function fetchPicture(config: OidcConfig, picture: string): Promise
     if (!res.ok || Number(res.headers.get("content-length") ?? 0) > 5 * 1024 * 1024) return null;
     return new File([await res.arrayBuffer()], "avatar", { type });
   } catch (error) { console.warn("Unable to fetch the profile photo", error); return null; }
+}
+
+/** Keeps the Elytra display name and avatar in step with the issuer's profile. Runs on each sign-in
+ * and when an account is connected. Only values that changed on the issuer since the last copy are
+ * applied, so edits made in Elytra stay until the issuer's value changes again. Never fails sign-in. */
+async function syncProfile(config: OidcConfig, identity: Identity): Promise<void> {
+  let saved: string | null = null;
+  try {
+    const synced = syncedProfile(identity.issuer, identity.subject);
+    if (!synced) return;
+    const update: Parameters<typeof applyProfileSync>[2] = {};
+    if (identity.name && identity.name !== synced.name) update.name = identity.name;
+    if (identity.picture !== synced.picture) {
+      if (identity.picture) {
+        const file = await fetchPicture(config, identity.picture);
+        saved = file && await validateImage(file).then(saveImage).catch(() => null);
+        // A photo that couldn't be downloaded is tried again at the next sign-in.
+        if (saved) update.picture = { url: identity.picture, avatarUrl: saved };
+      } else update.picture = { url: null, avatarUrl: null };
+    }
+    if (!update.name && !update.picture) return;
+    await removeImages(applyProfileSync(identity.issuer, identity.subject, update));
+  } catch (error) {
+    if (saved) await removeImages([saved]);
+    console.error("Unable to sync the profile from the account service", error);
+  }
 }

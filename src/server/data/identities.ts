@@ -4,7 +4,8 @@ import type { Viewer } from "@/lib/types";
 import { transaction } from "../db";
 import { tokenHash } from "../security";
 import { AppError } from "../errors";
-import { insertUser, one, run, userByUsername } from "./core";
+import { insertUser, one, run, userByUsername, type UserRow } from "./core";
+import { assertNameAllowed } from "../moderation/policy";
 
 /** An identity the issuer vouched for: the ID token's iss and sub, plus profile fields from userinfo. */
 export type Identity = { issuer: string; subject: string; name: string; picture: string | null };
@@ -62,8 +63,45 @@ export function createUserFromSignup(token: string, input: { username: string; d
     if (userIdForIdentity(identity.issuer, identity.subject)) throw new AppError(409, "identity_taken", "That account already has an Elytra account. Sign in instead.");
     if (userByUsername(input.username)) throw new AppError(409, "username_taken", "That username is already taken");
     const viewer = insertUser(input.username, input.displayName, "", input.aiOperated, input.avatarUrl);
-    run("INSERT INTO identity_links(issuer,subject,user_id,created_at) VALUES(?,?,?,?)", identity.issuer, identity.subject, viewer.id, Date.now());
+    // Record the issuer's name and picture as already synced, so the choices made here stay until
+    // they change on the issuer's side.
+    run("INSERT INTO identity_links(issuer,subject,user_id,created_at,synced_name,synced_picture,synced_avatar_url) VALUES(?,?,?,?,?,?,?)",
+      identity.issuer, identity.subject, viewer.id, Date.now(), identity.name, identity.picture, input.avatarUrl);
     run("DELETE FROM oidc_signups WHERE token_hash=?", tokenHash(token));
     return viewer;
+  });
+}
+
+/** What Elytra last copied from the issuer's profile for this link. */
+export function syncedProfile(issuer: string, subject: string): { name: string | null; picture: string | null } | null {
+  return one<{ name: string | null; picture: string | null }>("SELECT synced_name AS name,synced_picture AS picture FROM identity_links WHERE issuer=? AND subject=?", issuer, subject) ?? null;
+}
+/** Copies the issuer's changed name and picture onto the linked user. `avatarUrl` is the local
+ * file made from `picture`, or null when the picture was removed. Returns replaced avatar files to delete. */
+export function applyProfileSync(issuer: string, subject: string, update: { name?: string; picture?: { url: string | null; avatarUrl: string | null } }): string[] {
+  return transaction(() => {
+    const link = one<{ user_id: string; synced_avatar_url: string | null }>("SELECT user_id,synced_avatar_url FROM identity_links WHERE issuer=? AND subject=?", issuer, subject);
+    const user = link && one<UserRow>("SELECT * FROM users WHERE id=?", link.user_id);
+    if (!link || !user) return [];
+    const obsolete: string[] = [];
+    if (update.name !== undefined) {
+      const displayName = [...update.name.trim()].slice(0, 50).join("");
+      try {
+        if (displayName) { assertNameAllowed(displayName, "display_name", user.id); run("UPDATE users SET display_name=? WHERE id=?", displayName, user.id); }
+      } catch (error) { if (!(error instanceof AppError && error.code === "moderated_name")) throw error; }
+      // Recorded even when moderation rejects it, so the same name isn't retried on every sign-in.
+      run("UPDATE identity_links SET synced_name=? WHERE issuer=? AND subject=?", update.name, issuer, subject);
+    }
+    if (update.picture) {
+      const { url, avatarUrl } = update.picture;
+      // A removed issuer photo only clears the avatar Elytra made from it, not one the person chose here.
+      const replace = avatarUrl !== null || user.avatar_url === link.synced_avatar_url;
+      if (replace && user.avatar_url !== avatarUrl) {
+        run("UPDATE users SET avatar_url=? WHERE id=?", avatarUrl, user.id);
+        if (user.avatar_url) obsolete.push(user.avatar_url);
+      }
+      run("UPDATE identity_links SET synced_picture=?,synced_avatar_url=? WHERE issuer=? AND subject=?", url, avatarUrl, issuer, subject);
+    }
+    return obsolete;
   });
 }
