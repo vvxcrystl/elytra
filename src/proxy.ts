@@ -4,7 +4,7 @@ import { accountsConfig } from "./server/config";
 
 /** Response headers applied to every page render, built fresh per request because of the nonce. */
 function securityHeaders(nonce: string): Record<string, string> {
-  // "Continue with" posts a Server Action that redirects to the OIDC issuer. Before hydration
+  // "Sign in with" posts a Server Action that redirects to the OIDC issuer. Before hydration
   // that is a real form submission, and form-action also covers where it redirects.
   const oidc = accountsConfig().oidc;
   const formTargets = oidc ? ` ${new URL(oidc.issuer).origin}` : "";

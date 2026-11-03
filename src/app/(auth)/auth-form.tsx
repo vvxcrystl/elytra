@@ -4,7 +4,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { startTransition, useActionState, ViewTransition } from "react";
 import type { FormState } from "@/lib/types";
-import { continueWithOidc, finishOidcSignup, signIn, signUp } from "@/server/actions";
+import { signInWithOidc, finishOidcSignup, signIn, signUp } from "@/server/actions";
 
 type Field = {
   name: string;
@@ -102,7 +102,7 @@ export function AuthForm({
   showDemo?: boolean;
   /** False when the server only allows sign-in through the OIDC issuer. */
   passwordLogin?: boolean;
-  /** The issuer's name for the "Continue with" button, or null when OIDC is off. */
+  /** The issuer's name for the "Sign in with" button, or null when OIDC is off. */
   oidcName?: string | null;
   /** A message from a failed OIDC sign-in. */
   notice?: string | null;
@@ -126,7 +126,7 @@ export function AuthForm({
       <div>
         <h1 className="text-center text-[31px] leading-9 font-extrabold tracking-tight">{config.title}</h1>
         <p className="mt-2 mb-8 text-center text-[15px] text-fg-muted">
-          {showForm ? config.subtitle : `Sign in with your ${oidcName} account.`}
+          {config.subtitle}
         </p>
         {notice && (
           <p role="alert" className="mb-5 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
@@ -213,9 +213,9 @@ export function AuthForm({
         {oidcName && mode !== "finish" && (
           <>
             {showForm && <p className="my-5 text-center text-[13px] text-fg-subtle">or</p>}
-            <form action={continueWithOidc}>
+            <form action={signInWithOidc}>
               <button type="submit" className="btn-outline h-[52px] w-full text-[17px]">
-                Continue with {oidcName}
+                {mode === "signup" ? "Sign up" : "Sign in"} with {oidcName}
               </button>
             </form>
           </>

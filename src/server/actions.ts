@@ -90,8 +90,8 @@ async function redirectToIssuer(linkUserId: string | null): Promise<never> {
   }
   redirect(url);
 }
-/** "Continue with CrystlCloud" on the sign-in and sign-up pages. */
-export async function continueWithOidc(): Promise<void> { await redirectToIssuer(null); }
+/** "Sign in with CrystlCloud" on the sign-in page, and "Sign up with" on the sign-up page. */
+export async function signInWithOidc(): Promise<void> { await redirectToIssuer(null); }
 /** Settings: connect the signed-in account to an issuer account. */
 export async function connectOidcAccount(): Promise<void> {
   const viewer = await getViewer();

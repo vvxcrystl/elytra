@@ -72,7 +72,7 @@ To use a different OpenID Connect provider, also set `ELYTRA_OIDC_ISSUER` to its
 
 ### Local accounts
 
-Set `ELYTRA_ACCOUNTS=local` to use only Elytra's own usernames and passwords. No other settings are needed, and there is no "Continue with" button.
+Set `ELYTRA_ACCOUNTS=local` to use only Elytra's own usernames and passwords. No other settings are needed, and there is no "Sign in with CrystlCloud" button.
 
 ### How accounts connect
 
