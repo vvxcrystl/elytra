@@ -22,7 +22,7 @@ export function Onboarding({ profile, suggestions: initialSuggestions }: { profi
   const [state, action, pending] = useActionState(saveOnboardingProfile, undefined);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [bio, setBio] = useState(profile.bio);
-  const { file: avatarFile, preview: avatarPreview, selectImage: selectAvatar, cropDialog, error: avatarError } = useProfileImageUpload("avatar");
+  const { file: avatarFile, preview: avatarPreview, selectImage: selectAvatar, dropProps: avatarDropProps, dragging: avatarDragging, cropDialog, error: avatarError } = useProfileImageUpload("avatar");
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const errors = state?.fieldErrors ?? {};
 
@@ -89,9 +89,9 @@ export function Onboarding({ profile, suggestions: initialSuggestions }: { profi
         <section hidden={step !== 0} className="motion-safe:animate-[step-in_300ms_ease-out_both]">
           <Heading title="Make it yours" subtitle="Add a photo and the name people will see on your posts." />
           <div className="relative mx-auto mb-8 w-fit">
-            <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={pending} className="group relative block cursor-pointer rounded-full" aria-label="Choose a profile photo">
+            <button type="button" {...avatarDropProps} onClick={() => avatarInputRef.current?.click()} disabled={pending} className="group relative block cursor-pointer rounded-full" aria-label="Choose a profile photo">
               <span className="absolute -inset-2 rounded-full bg-gradient-to-tr from-accent/70 via-accent/20 to-transparent blur-md transition-opacity group-hover:opacity-100 opacity-70" />
-              <span className="relative block rounded-full ring-4 ring-bg">
+              <span className={clsx("relative block rounded-full ring-4", avatarDragging ? "ring-accent" : "ring-bg")}>
                 <Avatar user={preview} className="size-28! text-4xl!" />
                 <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
                   <Camera className="size-6" />

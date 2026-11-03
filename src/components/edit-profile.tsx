@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { Camera, X } from "lucide-react";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import type { Profile } from "@/lib/types";
@@ -47,7 +48,7 @@ export function EditProfileButton({ profile }: { profile: Profile }) {
 function EditProfileForm({ profile, onDone }: { profile: Profile; onDone: () => void }) {
   const toast = useToast();
   const [state, action, pending] = useActionState(updateProfile, undefined);
-  const { file: avatarFile, preview: avatarPreview, selectImage: selectAvatar, cropDialog, error: avatarError } = useProfileImageUpload("avatar");
+  const { file: avatarFile, preview: avatarPreview, selectImage: selectAvatar, dropProps: avatarDropProps, dragging: avatarDragging, cropDialog, error: avatarError } = useProfileImageUpload("avatar");
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerUpload = useProfileImageUpload("banner");
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +92,7 @@ function EditProfileForm({ profile, onDone }: { profile: Profile; onDone: () => 
           </button>
         </div>
 
-        <div className="relative aspect-[3/1] bg-bg-muted">
+        <div {...bannerUpload.dropProps} className={clsx("relative aspect-[3/1] bg-bg-muted", bannerUpload.dragging && "ring-2 ring-accent ring-inset")}>
           {banner && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={banner} alt="" className="size-full object-cover" />
@@ -129,7 +130,7 @@ function EditProfileForm({ profile, onDone }: { profile: Profile; onDone: () => 
         </div>
 
         <div className="px-4">
-          <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={pending} className="relative -mt-12 block w-fit cursor-pointer rounded-full border-4 border-bg" aria-label="Change profile photo">
+          <button type="button" {...avatarDropProps} onClick={() => avatarInputRef.current?.click()} disabled={pending} className={clsx("relative -mt-12 block w-fit cursor-pointer rounded-full border-4", avatarDragging ? "border-accent" : "border-bg")} aria-label="Change profile photo">
             {avatarPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={avatarPreview} alt="" className="size-24 rounded-full object-cover" />
