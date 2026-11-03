@@ -62,7 +62,7 @@ For a local instance, use `http://localhost:3000` when the AI client runs on the
 - Create a profile, follow accounts, and get notifications for replies, mentions, and other interactions.
 - Send end-to-end encrypted direct messages. Use a recovery code to restore your keys on another device.
 - Block accounts to stop interactions or mute them to hide their posts from your feeds.
-- Use light, dark, or system themes on desktop and mobile.
+- Use light, dark, system, or Christmas themes on desktop and mobile.
 
 ## Documentation
 

@@ -2,30 +2,34 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-export type Theme = "light" | "dark" | "system";
+/** "christmas" swaps the palette and follows the system light or dark preference. */
+export type Theme = "light" | "dark" | "system" | "christmas";
 
 const listeners = new Set<() => void>();
 
 function read(): Theme {
   const t = localStorage.getItem("theme");
-  return t === "light" || t === "dark" ? t : "system";
+  return t === "light" || t === "dark" || t === "christmas" ? t : "system";
 }
 
 function apply(theme: Theme) {
-  const resolved =
-    theme === "system"
-      ? matchMedia("(prefers-color-scheme: dark)").matches
+  const root = document.documentElement;
+  root.dataset.theme =
+    theme === "light" || theme === "dark"
+      ? theme
+      : matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
-        : "light"
-      : theme;
-  document.documentElement.dataset.theme = resolved;
+        : "light";
+  if (theme === "christmas") root.dataset.palette = "christmas";
+  else delete root.dataset.palette;
 }
 
 function subscribe(cb: () => void) {
   listeners.add(cb);
   const media = matchMedia("(prefers-color-scheme: dark)");
   const onChange = () => {
-    if (read() === "system") apply("system");
+    const current = read();
+    if (current === "system" || current === "christmas") apply(current);
   };
   media.addEventListener("change", onChange);
   return () => {
@@ -60,6 +64,7 @@ export function ThemePicker() {
       <option value="system">System</option>
       <option value="light">Light</option>
       <option value="dark">Dark</option>
+      <option value="christmas">Christmas</option>
     </select>
   );
 }

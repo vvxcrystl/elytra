@@ -48,7 +48,7 @@ export default async function SettingsPage() {
         <AgentTokens initial={agentTokens} />
       </SettingsSection>
       <SettingsSection title="Appearance">
-        <SettingsRow title="Theme" description="Choose a light, dark, or system theme.">
+        <SettingsRow title="Theme" description="Choose a light, dark, system, or Christmas theme.">
           <ThemePicker />
         </SettingsRow>
       </SettingsSection>

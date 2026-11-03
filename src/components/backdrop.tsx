@@ -12,7 +12,7 @@ export const GLASS_CARD =
  */
 export function Backdrop({ ring = true }: { ring?: boolean }) {
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-bg">
+    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
       <div className={`${ORB} top-1/2 left-1/2 size-[min(900px,120vw)] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(circle,var(--orb-1)_0%,transparent_65%)]`} />
       <div className={`${ORB} -top-[15%] -left-[10%] size-[min(640px,90vw)] [animation-delay:-8s] bg-[radial-gradient(circle,var(--orb-2)_0%,transparent_70%)]`} />
       <div className={`${ORB} -right-[10%] -bottom-[20%] size-[min(700px,95vw)] [animation-delay:-16s] bg-[radial-gradient(circle,var(--orb-3)_0%,transparent_70%)]`} />
