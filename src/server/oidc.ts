@@ -210,29 +210,31 @@ export async function fetchPicture(config: OidcConfig, picture: string): Promise
   } catch (error) { console.warn("Unable to fetch the profile photo", error); return null; }
 }
 
-/** Keeps the Elytra display name and avatar in step with the issuer's profile. Runs on each sign-in
- * and when an account is connected. Only values that changed on the issuer since the last copy are
- * applied, so edits made in Elytra stay until the issuer's value changes again. Never fails sign-in. */
-async function syncProfile(config: OidcConfig, identity: Identity): Promise<void> {
+/** Keeps the Elytra display name and avatar in step with the issuer's profile. Runs at sign-in, when
+ * an account is connected, and on page loads (refreshProfileOnLoad). Only values that changed on the
+ * issuer since the last copy are applied. Returns whether anything changed. Never throws. */
+async function syncProfile(config: OidcConfig, identity: Identity): Promise<boolean> {
   let saved: string | null = null;
   try {
     const synced = syncedProfile(identity.issuer, identity.subject);
-    if (!synced) return;
+    if (!synced) return false;
     const update: Parameters<typeof applyProfileSync>[2] = {};
     if (identity.name && identity.name !== synced.name) update.name = identity.name;
     if (identity.picture !== synced.picture) {
       if (identity.picture) {
         const file = await fetchPicture(config, identity.picture);
         saved = file && await validateImage(file).then(saveImage).catch(() => null);
-        // A photo that couldn't be downloaded is tried again at the next sign-in.
+        // A photo that couldn't be downloaded is tried again at the next sync.
         if (saved) update.picture = { url: identity.picture, avatarUrl: saved };
       } else update.picture = { url: null, avatarUrl: null };
     }
-    if (!update.name && !update.picture) return;
+    if (!update.name && !update.picture) return false;
     await removeImages(applyProfileSync(identity.issuer, identity.subject, update));
+    return true;
   } catch (error) {
     if (saved) await removeImages([saved]);
     console.error("Unable to sync the profile from the account service", error);
+    return false;
   }
 }
 
@@ -256,28 +258,85 @@ function unseal(config: OidcConfig, sealed: string): string | null {
 // The issuer's profile endpoint accepts JPEG, PNG and WebP up to 1 MB.
 const PUSH_TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" };
 const PUSH_MAX_BYTES = 1024 * 1024;
-const pushes = new Map<string, Promise<void>>();
+const basicAuth = (config: OidcConfig) => `Basic ${Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(config.clientSecret)}`).toString("base64")}`;
 
-/** Sends Elytra-side changes to the linked user's name or avatar back to the issuer, so the profile
- * stays the same in both places. Compares the current values with the last synced ones, so it's safe
- * to call after any profile edit. One push runs per user at a time, because each refresh rotates the
- * refresh token. Never throws. */
+// Pushes and pulls for one user run one after another, because each refresh rotates the refresh token.
+const queues = new Map<string, Promise<unknown>>();
+function queued<T>(userId: string, task: () => Promise<T>): Promise<T> {
+  const next = (queues.get(userId) ?? Promise.resolve()).then(task, task);
+  queues.set(userId, next);
+  return next.finally(() => { if (queues.get(userId) === next) queues.delete(userId); });
+}
+/** Trades the stored refresh token for an access token and stores the rotated refresh token. */
+async function accessToken(config: OidcConfig, subject: string, sealed: string | null): Promise<string | null> {
+  const refreshToken = sealed && unseal(config, sealed);
+  if (!refreshToken) return null;
+  const provider = await metadata(config.issuer);
+  const res = await fetch(provider.token_endpoint, {
+    method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: { Authorization: basicAuth(config), "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+  });
+  const tokens = await res.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown };
+  if (!res.ok || typeof tokens.access_token !== "string") {
+    // A revoked or expired grant can't recover; the next sign-in stores a new one.
+    if (res.status === 400 || res.status === 401) saveRefreshToken(config.issuer, subject, null);
+    throw new Error(`refresh returned ${res.status}`);
+  }
+  if (typeof tokens.refresh_token === "string") saveRefreshToken(config.issuer, subject, seal(config, tokens.refresh_token));
+  return tokens.access_token;
+}
+
+// How often a page load may check the issuer for profile changes, per user, and how long it waits.
+const PULL_INTERVAL_MS = 5000, PULL_WAIT_MS = 3000;
+const lastPull = new Map<string, number>();
+/** Called while loading a page for a signed-in user. Copies name or photo changes made on the
+ * issuer, so they show on this load, and returns whether anything changed. Checks at most every
+ * few seconds per user and waits at most a few seconds; a slower check finishes in the background. */
+export async function refreshProfileOnLoad(userId: string): Promise<boolean> {
+  const config = accountsConfig().oidc;
+  const now = Date.now();
+  if (!config || now - (lastPull.get(userId) ?? 0) < PULL_INTERVAL_MS) return false;
+  lastPull.set(userId, now);
+  if (lastPull.size > 10000) lastPull.delete(lastPull.keys().next().value!);
+  const pulled = pullProfile(config, userId);
+  return Promise.race([pulled, new Promise<boolean>(resolve => setTimeout(resolve, PULL_WAIT_MS, false))]);
+}
+/** Reads the linked user's profile from the issuer and applies changes. Never throws. */
+export function pullProfile(config: OidcConfig, userId: string): Promise<boolean> {
+  return queued(userId, async () => {
+    try {
+      const state = profilePushState(userId, config.issuer);
+      if (!state) return false;
+      const token = await accessToken(config, state.subject, state.refresh_token);
+      if (!token) return false;
+      const info = await fetchJson((await metadata(config.issuer)).userinfo_endpoint, { headers: { Authorization: `Bearer ${token}` } });
+      if (info.sub !== state.subject) throw new Error("userinfo subject does not match the link");
+      const picture = typeof info.picture === "string" && /^https?:\/\//.test(info.picture) ? info.picture : null;
+      return await syncProfile(config, { issuer: config.issuer, subject: state.subject, name: typeof info.name === "string" ? info.name.trim().slice(0, 200) : "", picture });
+    } catch (error) {
+      console.error("Unable to check the account service for profile changes", error);
+      return false;
+    }
+  });
+}
+
 /** Call after a profile edit. Pushes in the background when an issuer is configured, so the edit
  * doesn't wait on the issuer. Elytra runs as one long-lived Node process, so the push finishes. */
 export function pushProfileLater(userId: string): void {
   const config = accountsConfig().oidc;
   if (config) void pushProfile(config, userId);
 }
+/** Sends Elytra-side changes to the linked user's name or avatar back to the issuer, so the profile
+ * stays the same in both places. Compares the current values with the last synced ones, so it's safe
+ * to call after any profile edit. Never throws. */
 export function pushProfile(config: OidcConfig, userId: string): Promise<void> {
-  const next = (pushes.get(userId) ?? Promise.resolve()).then(() => pushProfileNow(config, userId));
-  pushes.set(userId, next);
-  return next.finally(() => { if (pushes.get(userId) === next) pushes.delete(userId); });
+  return queued(userId, () => pushProfileNow(config, userId));
 }
 async function pushProfileNow(config: OidcConfig, userId: string): Promise<void> {
   try {
     const state = profilePushState(userId, config.issuer);
-    const refreshToken = state?.refresh_token && unseal(config, state.refresh_token);
-    if (!state || !refreshToken) return;
+    if (!state?.refresh_token) return;
     const syncedName = state.synced_name === null ? null : [...state.synced_name.trim()].slice(0, 50).join("");
     const body: { name?: string; photo?: string | null } = {};
     if (state.display_name !== syncedName) body.name = state.display_name;
@@ -288,25 +347,12 @@ async function pushProfileNow(config: OidcConfig, userId: string): Promise<void>
     }
     if (body.name === undefined && body.photo === undefined) return;
 
-    const provider = await metadata(config.issuer);
-    const basic = Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(config.clientSecret)}`).toString("base64");
-    const refreshed = await fetch(provider.token_endpoint, {
-      method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-    });
-    const tokens = await refreshed.json().catch(() => ({})) as { access_token?: unknown; refresh_token?: unknown };
-    if (!refreshed.ok || typeof tokens.access_token !== "string") {
-      // A revoked or expired grant can't recover; the next sign-in stores a new one.
-      if (refreshed.status === 400 || refreshed.status === 401) saveRefreshToken(config.issuer, state.subject, null);
-      throw new Error(`refresh returned ${refreshed.status}`);
-    }
-    if (typeof tokens.refresh_token === "string") saveRefreshToken(config.issuer, state.subject, seal(config, tokens.refresh_token));
-
+    const token = await accessToken(config, state.subject, state.refresh_token);
+    if (!token) return;
     const res = await fetch(`${new URL(config.issuer).origin}/api/profile`, {
       method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ access_token: tokens.access_token, ...body }),
+      headers: { Authorization: basicAuth(config), "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ access_token: token, ...body }),
     });
     const saved = await res.json().catch(() => ({})) as { name?: unknown; picture?: unknown };
     if (!res.ok) throw new Error(`profile update returned ${res.status}`);

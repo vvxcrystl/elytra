@@ -10,7 +10,7 @@ import { getDb } from "../src/server/db";
 import { authenticate, createUser, one, run } from "../src/server/data/core";
 import { createUserFromSignup, linkIdentity, pendingSignup, userIdForIdentity } from "../src/server/data/identities";
 import { accountsConfig, CRYSTLCLOUD_ISSUER } from "../src/server/config";
-import { beginOidc, completeOidc, pushProfile } from "../src/server/oidc";
+import { beginOidc, completeOidc, pullProfile, pushProfile, refreshProfileOnLoad } from "../src/server/oidc";
 
 // A fake issuer on a random local port stands in for CrystlCloud Accounts: discovery, JWKS,
 // a token endpoint that checks the client secret and PKCE verifier, and userinfo.
@@ -197,6 +197,23 @@ try {
     await pushProfile(config, sam);
     assert.equal(pushed.at(-1)?.name, "Sam Gif", "a revoked grant sends nothing");
     assert.equal(one<{ t: string | null }>("SELECT refresh_token t FROM identity_links WHERE user_id=?", sam)!.t, null, "and is forgotten until the next sign-in");
+  });
+
+  await check("page loads pick up issuer profile changes without a new sign-in, at most every few seconds", async () => {
+    const pat = await createUser("oidc_pat", "Pat Local", "securepass123");
+    profiles.set("sub-pat", { name: "Pat One", picture: null });
+    await signIn("sub-pat", { linkUserId: pat.id, viewerId: pat.id });
+    const name = () => one<{ display_name: string }>("SELECT display_name FROM users WHERE id=?", pat.id)!.display_name;
+    assert.equal(name(), "Pat One");
+    profiles.set("sub-pat", { name: "Pat Two", picture: `${issuerOrigin}/photos/pat` });
+    assert.equal(await refreshProfileOnLoad(pat.id), true);
+    assert.equal(name(), "Pat Two");
+    assert.match(one<{ a: string }>("SELECT avatar_url a FROM users WHERE id=?", pat.id)!.a, /^\/api\/media\//);
+    profiles.set("sub-pat", { name: "Pat Three", picture: `${issuerOrigin}/photos/pat` });
+    assert.equal(await refreshProfileOnLoad(pat.id), false, "a second load right away doesn't ask the issuer again");
+    assert.equal(name(), "Pat Two");
+    assert.equal(await pullProfile(config, pat.id), true);
+    assert.equal(name(), "Pat Three");
   });
 
   await check("config: local accounts by default, CrystlCloud with oidc, and missing client credentials fail with the fix", () => {

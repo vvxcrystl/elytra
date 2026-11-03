@@ -4,10 +4,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Viewer } from "@/lib/types";
 import { createSession, deleteSession, viewerForToken, SESSION_AGE } from "./data/core";
+import { refreshProfileOnLoad } from "./oidc";
 
 export const getViewer = cache(async (): Promise<Viewer | null> => {
   const token = (await cookies()).get("elytra_session")?.value;
-  return token ? viewerForToken(token) : null;
+  const viewer = token ? viewerForToken(token) : null;
+  // Pick up name and photo changes made in CrystlCloud before anything on the page reads them.
+  if (viewer && await refreshProfileOnLoad(viewer.id)) return viewerForToken(token!);
+  return viewer;
 });
 export async function requireViewer(): Promise<Viewer> {
   const viewer = await getViewer();
