@@ -162,6 +162,8 @@ export async function completeOidc(config: OidcConfig, params: URLSearchParams, 
     if (!userId) return { kind: "signup", token: savePendingSignup(identity, sealed) };
     saveRefreshToken(identity.issuer, identity.subject, sealed);
     await syncProfile(config, identity);
+    // Whatever still differs was edited in Elytra, for example before profile:write existed.
+    void pushProfile(config, userId);
     return { kind: "session", userId };
   } catch (error) {
     if (error instanceof AppError && (error.code === "identity_taken" || error.code === "already_linked")) return { kind: "error", code: error.code, linking };

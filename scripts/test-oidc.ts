@@ -146,7 +146,7 @@ try {
     assert.deepEqual(await signIn("sub-new"), { kind: "session", userId: robin.id });
   });
 
-  await check("profile sync: issuer name and photo changes reach Elytra, while Elytra edits stay until the issuer changes", async () => {
+  await check("profile sync: issuer name and photo changes reach Elytra, and Elytra edits go back at sign-in", async () => {
     const sam = await createUser("oidc_sam", "Sam Local", "securepass123");
     const user = () => ({ ...one<{ display_name: string; avatar_url: string | null }>("SELECT display_name,avatar_url FROM users WHERE id=?", sam.id)! });
     profiles.set("sub-sam", { name: "Sam One", picture: `${issuerOrigin}/photos/p1` });
@@ -156,7 +156,9 @@ try {
     assert.match(first ?? "", /^\/api\/media\/[a-f0-9]+\.jpg$/, "connecting copies the photo");
     run("UPDATE users SET display_name='Sam Custom',avatar_url='/api/media/custom.jpg' WHERE id=?", sam.id);
     await signIn("sub-sam");
+    await pushProfile(config, sam.id); // waits for the push that sign-in starts in the background
     assert.deepEqual(user(), { display_name: "Sam Custom", avatar_url: "/api/media/custom.jpg" }, "unchanged issuer values don't overwrite Elytra edits");
+    assert.equal(profiles.get("sub-sam")?.name, "Sam Custom", "and sign-in sends the Elytra edit to the issuer");
     profiles.set("sub-sam", { name: "Sam Two", picture: `${issuerOrigin}/photos/p2` });
     await signIn("sub-sam");
     const second = user().avatar_url;
