@@ -24,6 +24,8 @@ docker compose up -d --build
 
 Point the tunnel's published hostname at `http://app:3000`. The database and uploads persist in a Docker volume. This deployment starts without demo accounts.
 
+People sign in with an Elytra username and password by default. To add "Continue with CrystlCloud", or sign-in through another OpenID Connect provider, see [Choose how people sign in](docs/HOSTING.md#choose-how-people-sign-in).
+
 The [hosting guide](docs/HOSTING.md) covers tunnel setup, backups, and hosting without Docker.
 
 ## Run it locally

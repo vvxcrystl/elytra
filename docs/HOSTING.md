@@ -45,6 +45,54 @@ The Docker setup starts with an empty database and turns off demo seeding. Local
 
 For the dashboard flow and token management, see Cloudflare's [tunnel setup guide](https://developers.cloudflare.com/tunnel/get-started/) and [token documentation](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/).
 
+## Choose how people sign in
+
+Elytra has two sign-in modes. Pick one with `ELYTRA_ACCOUNTS` in `.env`.
+
+- `local` is the default. People create an account with a username and password on your Elytra.
+- `oidc` adds a "Continue with CrystlCloud" button. It works with CrystlCloud Accounts or any OpenID Connect provider that supports the authorization code flow with PKCE and a client secret.
+
+### Local accounts
+
+Leave `ELYTRA_ACCOUNTS` unset, or set it to `local`. Nothing else is needed.
+
+### CrystlCloud Accounts or another OIDC provider
+
+1. Register Elytra with the provider. Its redirect URI is your public origin followed by `/api/oidc/callback`. For CrystlCloud Accounts, run this in the accounts server's directory:
+
+   ```sh
+   npm run client -- add Elytra https://twitter.somedomain.org/api/oidc/callback --owner you@example.com --uri https://twitter.somedomain.org
+   ```
+
+   With Docker, replace `npm run client --` with `docker compose exec accounts node src/clients.ts`. The command prints the client ID and a secret. It shows the secret only once.
+
+2. Add these lines to `.env`:
+
+   ```dotenv
+   ELYTRA_ACCOUNTS=oidc
+   ELYTRA_OIDC_ISSUER=https://accounts.crystlcloud.org/api/auth
+   ELYTRA_OIDC_CLIENT_ID=the-client-id
+   ELYTRA_OIDC_CLIENT_SECRET=the-client-secret
+   ```
+
+   The issuer must match the provider's `issuer` value exactly. For CrystlCloud Accounts it ends in `/api/auth`. Elytra reads `<issuer>/.well-known/openid-configuration` to find the other endpoints. `ELYTRA_PUBLIC_ORIGIN` is required in this mode, because Elytra builds the redirect URI from it.
+
+3. Optionally set `ELYTRA_OIDC_NAME` to change the name on the button. It defaults to `CrystlCloud`.
+
+4. Run `docker compose up -d` to apply the change.
+
+Password sign-in stays on. Set `ELYTRA_PASSWORD_LOGIN=false` to allow only the provider. That hides the password form and the sign-up page, and the `/auth/login` and `/auth/register` API calls return 403. Accounts without a connected provider account can't sign in in that mode, so have existing users connect first.
+
+How accounts connect:
+
+- Someone who signs in through the provider for the first time picks an Elytra username. Elytra never takes the username from their email. The display name starts as their provider name, and they can choose to use their provider photo as the avatar.
+- Someone who already has an Elytra account signs in with their password, opens Settings, and selects Connect next to "CrystlCloud account". After that, either sign-in method opens the same account.
+- Elytra never connects two accounts because their email addresses match.
+- User IDs don't change, so posts, follows, and encrypted messages stay with the account. A new device still needs the messaging recovery code.
+- Signing out of Elytra doesn't sign you out of the provider.
+
+If the provider is unreachable, the sign-in page shows an error and password sign-in, when enabled, keeps working.
+
 ## Manage the server
 
 ```sh
